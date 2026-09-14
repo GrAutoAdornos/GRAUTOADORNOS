@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GR Auto Adornos</title>
+  
+  <!-- EmailJS SDK -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script type="text/javascript">
+    (function() {
+      emailjs.init("gFYWXFr3j_woisLA-");
+    })();
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brandRed: '#E50914',
+            brandDark: '#121212',
+            brandCard: '#1E1E1E',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-brandDark text-white font-sans flex flex-col min-h-screen">
+
+  <!-- Header / Nav -->
+  <header class="bg-black border-b border-brandRed sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-brandRed tracking-wider">GR AUTO ADORNOS</h1>
+      <nav class="flex items-center space-x-6">
+        <a href="#catalogo" class="hover:text-brandRed transition">Catálogo</a>
+        <button onclick="abrirCarrito()" class="relative bg-brandRed hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition">
+          🛒 Carrito
+          <span id="cart-count" class="ml-2 bg-white text-black text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="bg-gradient-to-r from-black via-brandCard to-black py-16 text-center border-b border-gray-800">
+    <div class="max-w-4xl mx-auto px-4">
+      <h2 class="text-4xl md:text-5xl font-extrabold mb-4">Equipa Tu Vehículo Con Los Mejores Accesorios</h2>
+      <p class="text-gray-400 text-lg mb-8">Pantallas, cámaras de seguridad, sistemas de audio e instalación profesional.</p>
+      <a href="#catalogo" class="bg-brandRed hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition">Ver Productos</a>
+    </div>
+  </section>
+
+  <!-- Catálogo de Productos -->
+  <main id="catalogo" class="max-w-7xl mx-auto px-4 py-12 flex-grow">
+    <h2 class="text-3xl font-bold text-center mb-10 border-b-2 border-brandRed inline-block pb-2">Catálogo de Productos</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      
+      <!-- Producto 1 -->
+      <div class="bg-brandCard rounded-lg p-6 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between">
+        <div>
+          <div class="h-48 bg-gray-800 rounded-md mb-4 flex items-center justify-center text-gray-500">
+            [ Imagen Pantalla Android ]
+          </div>
+          <h3 class="text-xl font-bold mb-2">Pantalla Android para Vehículo</h3>
+          <p class="text-gray-400 text-sm mb-4">Pantalla táctil HD, GPS, Bluetooth y compatibilidad con Apple CarPlay / Android Auto.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-brandRed mb-4">RD$ 12,500</p>
+          <button onclick="agregarAlCarrito('Pantalla Android para Vehículo', 12500)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded transition">
+            Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+      <!-- Producto 2 -->
+      <div class="bg-brandCard rounded-lg p-6 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between">
+        <div>
+          <div class="h-48 bg-gray-800 rounded-md mb-4 flex items-center justify-center text-gray-500">
+            [ Imagen Cámara de Reversa ]
+          </div>
+          <h3 class="text-xl font-bold mb-2">Cámara de Seguridad / Reversa</h3>
+          <p class="text-gray-400 text-sm mb-4">Visión nocturna, alta definición y gran angular para estacionar con máxima seguridad.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-brandRed mb-4">RD$ 3,500</p>
+          <button onclick="agregarAlCarrito('Cámara de Seguridad / Reversa', 3500)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded transition">
+            Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+      <!-- Producto 3 -->
+      <div class="bg-brandCard rounded-lg p-6 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between">
+        <div>
+          <div class="h-48 bg-gray-800 rounded-md mb-4 flex items-center justify-center text-gray-500">
+            [ Imagen Kit de Bocinas ]
+          </div>
+          <h3 class="text-xl font-bold mb-2">Kit de Bocinas de Alta Fidelidad</h3>
+          <p class="text-gray-400 text-sm mb-4">Set de altavoces de alta potencia para un sonido claro, envolvente y potente.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-brandRed mb-4">RD$ 7,500</p>
+          <button onclick="agregarAlCarrito('Kit de Bocinas', 7500)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded transition">
+            Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL DEL CARRITO DE COMPRA / AGENDAR CITA -->
+  <div id="modal-carrito" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-brandCard border border-brandRed rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+      <button onclick="cerrarCarrito()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
+      
+      <h2 class="text-2xl font-bold mb-4 text-brandRed">Tu Carrito de Compras</h2>
+      
+      <!-- Elementos del Carrito -->
+      <div id="cart-items" class="space-y-3 mb-6">
+        <p class="text-gray-400">El carrito está vacío.</p>
+      </div>
+
+      <div class="border-t border-gray-800 pt-4 mb-6 flex justify-between items-center">
+        <span class="text-lg font-bold">Total Productos:</span>
+        <span id="cart-total" class="text-xl font-bold text-brandRed">RD$ 0</span>
+      </div>
+
+      <!-- Formulario de Pedido & Cita -->
+      <form id="booking-form" class="space-y-4 bg-black p-4 rounded-lg border border-gray-800">
+        <input type="hidden" id="cart_summary_input" name="cart_summary">
+        <input type="hidden" id="total_price_input" name="total_price">
+
+        <h3 class="text-lg font-bold text-white mb-2">Datos del Cliente</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Nombre Completo</label>
+            <input type="text" id="user_name" name="user_name" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-brandRed">
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Correo Electrónico</label>
+            <input type="email" id="user_email" name="user_email" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-brandRed">
+          </div>
+        </div>
+
+        <!-- Opción de Instalación -->
+        <div class="flex items-center space-x-3 bg-gray-900 p-3 rounded border border-gray-800 mt-4">
+          <input type="checkbox" id="requiere_instalacion" name="requiere_instalacion" onchange="toggleInstalacion()" class="w-5 h-5 accent-brandRed">
+          <label for="requiere_instalacion" class="text-sm text-white font-medium cursor-pointer">
+            ¿Deseas servicio de instalación profesional? (Desde +RD$ 1,000)
+          </label>
+        </div>
+
+        <!-- Alerta de Entrega sin Instalación -->
+        <div id="info-envio" class="bg-gray-900 p-3 rounded border border-gray-800 text-xs text-gray-300">
+          🚚 **Tiempo de entrega:** Los envíos a domicilio sin servicio de instalación se realizan en un plazo de **1 a 5 días hábiles**.
+        </div>
+
+        <!-- Agendar Cita (Condicional) -->
+        <div id="seccion-cita" class="hidden space-y-3 pt-3 border-t border-gray-800">
+          <h3 class="text-md font-bold text-brandRed">Agendar Cita de Instalación</h3>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-300">Seleccionar Día (Solo Sábados)</label>
+              <input type="date" id="fecha_cita" name="fecha_cita" onchange="validarFechaYHorarios()" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-brandRed">
+            </div>
+            
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-300">Hora Disponible</label>
+              <select id="hora_cita" name="hora_cita" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-brandRed">
+                <option value="">Selecciona una fecha primero</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerta Dinámica de Pago -->
+        <div id="alerta-pago" class="bg-red-950 border border-brandRed text-red-200 p-3 rounded text-xs hidden">
+          ⚠️ **Aviso de Reserva:** Has seleccionado una cita con 2 semanas o más de anticipación. Para separar tus productos y asegurar la cita, se requiere la transferencia previa del **50% del total**.
+        </div>
+
+        <!-- Método de Pago -->
+        <div>
+          <label class="block text-xs font-medium mb-1 text-gray-300">Método de Pago</label>
+          <select id="metodo_pago" name="metodo_pago" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-brandRed" required>
+            <option value="Pago Contra Entrega / Efectivo">Pago Contra Entrega (Efectivo)</option>
+            <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+          </select>
+        </div>
+
+        <button type="submit" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-3 rounded-lg transition text-md mt-4">
+          Confirmar y Procesar Orden
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-black py-6 text-center text-gray-500 text-sm border-t border-gray-900">
+    <p>&copy; 2026 GR Auto Adornos. Todos los derechos reservados.</p>
+  </footer>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDDJltPlA8kjDzWnYFNkQnRBxFylSH52Tg",
+      authDomain: "gr-auto-adornos.firebaseapp.com",
+      projectId: "gr-auto-adornos",
+      storageBucket: "gr-auto-adornos.firebasestorage.app",
+      messagingSenderId: "387692589652",
+      appId: "1:387692589652:web:25cdeb4fcb183e00f133c1",
+      measurementId: "G-XD4DMESRJ4"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+  </script>
+
+  <!-- Lógica de la Aplicación -->
+  <script>
+    let carrito = [];
+    const COSTO_INSTALACION = 1000;
+
+    // Simulación de base de datos interna de citas
+    const citasOcupadas = {};
+
+    function agregarAlCarrito(nombre, precio) {
+      carrito.push({ nombre, precio });
+      actualizarCarritoUI();
+      abrirCarrito();
+    }
+
+    function eliminarDelCarrito(index) {
+      carrito.splice(index, 1);
+      actualizarCarritoUI();
+    }
+
+    function actualizarCarritoUI() {
+      document.getElementById('cart-count').innerText = carrito.length;
+      const container = document.getElementById('cart-items');
+      
+      if (carrito.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm">El carrito está vacío.</p>';
+        document.getElementById('cart-total').innerText = 'RD$ 0';
+        return;
+      }
+
+      let html = '';
+      let subtotal = 0;
+
+      carrito.forEach((prod, index) => {
+        subtotal += prod.precio;
+        html += `
+          <div class="flex justify-between items-center bg-gray-900 p-3 rounded border border-gray-800">
+            <span class="text-sm">${prod.nombre}</span>
+            <div class="flex items-center space-x-3">
+              <span class="text-brandRed font-bold text-sm">RD$ ${prod.precio.toLocaleString()}</span>
+              <button onclick="eliminarDelCarrito(${index})" class="text-gray-500 hover:text-red-500 font-bold">&times;</button>
+            </div>
+          </div>
+        `;
+      });
+
+      const requiere = document.getElementById('requiere_instalacion').checked;
+      let total = subtotal + (requiere ? COSTO_INSTALACION : 0);
+
+      if (requiere) {
+        html += `
+          <div class="flex justify-between items-center bg-gray-800 p-3 rounded text-sm text-yellow-400">
+            <span>Servicio de Instalación Base</span>
+            <span>+RD$ ${COSTO_INSTALACION.toLocaleString()}</span>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+      document.getElementById('cart-total').innerText = 'RD$ ' + total.toLocaleString();
+
+      // Preparar variables ocultas para EmailJS
+      document.getElementById('cart_summary_input').value = carrito.map(p => p.nombre).join(', ');
+      document.getElementById('total_price_input').value = 'RD$ ' + total.toLocaleString();
+    }
+
+    function abrirCarrito() {
+      document.getElementById('modal-carrito').classList.remove('hidden');
+    }
+
+    function cerrarCarrito() {
+      document.getElementById('modal-carrito').classList.add('hidden');
+    }
+
+    function toggleInstalacion() {
+      const requiere = document.getElementById('requiere_instalacion').checked;
+      const seccionCita = document.getElementById('seccion-cita');
+      const infoEnvio = document.getElementById('info-envio');
+      const inputFecha = document.getElementById('fecha_cita');
+
+      if (requiere) {
+        seccionCita.classList.remove('hidden');
+        infoEnvio.classList.add('hidden');
+        inputFecha.required = true;
+      } else {
+        seccionCita.classList.add('hidden');
+        infoEnvio.classList.remove('hidden');
+        document.getElementById('alerta-pago').classList.add('hidden');
+        inputFecha.required = false;
+      }
+
+      actualizarCarritoUI();
+    }
+
+    function validarFechaYHorarios() {
+      const fechaInput = document.getElementById('fecha_cita').value;
+      const horaSelect = document.getElementById('hora_cita');
+      const alertaPago = document.getElementById('alerta-pago');
+      
+      if (!fechaInput) return;
+
+      const dateObj = new Date(fechaInput + 'T00:00:00');
+      const diaSemana = dateObj.getDay(); // 6 = Sábado
+
+      // Validar si es Sábado
+      if (diaSemana !== 6) {
+        alert("Las instalaciones solo se realizan los días Sábado. Por favor elige otro día.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Selecciona un sábado</option>';
+        return;
+      }
+
+      // Validar límite de la agenda (Privado)
+      const horasReservadas = citasOcupadas[fechaInput] || [];
+      if (horasReservadas.length >= 2) {
+        alert("La agenda para este sábado está completamente llena. Por favor elige el próximo sábado disponible.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Agenda llena</option>';
+        return;
+      }
+
+      // Generar turnos (1:00 PM o 4:00 PM)
+      const turnosPosibles = [
+        { hora: '13:00', label: '1:00 PM' },
+        { hora: '16:00', label: '4:00 PM' }
+      ];
+
+      let opciones = '<option value="">Selecciona una hora</option>';
+      turnosPosibles.forEach(turno => {
+        if (!horasReservadas.includes(turno.hora)) {
+          opciones += `<option value="${turno.label}">${turno.label}</option>`;
+        }
+      });
+      horaSelect.innerHTML = opciones;
+
+      // Evaluar la regla de las 2 semanas o más
+      const hoy = new Date();
+      const diferenciaDias = Math.ceil((dateObj - hoy) / (1000 * 60 * 60 * 24));
+
+      if (diferenciaDias >= 14) {
+        alertaPago.classList.remove('hidden');
+        document.getElementById('metodo_pago').value = 'Transferencia Bancaria';
+      } else {
+        alertaPago.classList.add('hidden');
+      }
+    }
+
+    // Envío por EmailJS
+    document.getElementById('booking-form').addEventListener('submit', function(event) {
+      event.preventDefault();
+
+      if (carrito.length === 0) {
+        alert("El carrito está vacío. Agrega al menos un producto.");
+        return;
+      }
+
+      const requiereInstalacion = document.getElementById('requiere_instalacion').checked;
+      const fecha = document.getElementById('fecha_cita').value;
+      const hora = document.getElementById('hora_cita').value;
+
+      if (requiereInstalacion && (!fecha || !hora)) {
+        alert("Por favor selecciona una fecha y una hora para tu cita de instalación.");
+        return;
+      }
+
+      emailjs.sendForm('service_jfx0g2e', 'template_mhdgbsw', this)
+        .then(function() {
+            alert('¡Tu orden ha sido registrada con éxito! Te contactaremos a la brevedad.');
+            
+            if (requiereInstalacion && fecha && hora) {
+              const horaCode = hora.includes('1:00') ? '13:00' : '16:00';
+              if (!citasOcupadas[fecha]) citasOcupadas[fecha] = [];
+              citasOcupadas[fecha].push(horaCode);
+            }
+
+            carrito = [];
+            actualizarCarritoUI();
+            document.getElementById('booking-form').reset();
+            toggleInstalacion();
+            cerrarCarrito();
+        }, function(error) {
+            alert('Ocurrió un error al enviar el pedido: ' + JSON.stringify(error));
+        });
+    });
+  </script>
+</body>
+</html>
