@@ -328,7 +328,29 @@
     function agregarAlCarrito(nombre, precio, esInstalable) {
       carrito.push({ nombre, precio, esInstalable });
       actualizarCarritoUI();
-    }
+  
+  // Esta línea llama al cartel flotante
+  mostrarToast(nombre);
+}
+
+function mostrarToast(nombreProducto) {
+  const toast = document.getElementById('toast-notification');
+  const toastName = document.getElementById('toast-product-name');
+  
+  if (toast && toastName) {
+    toastName.innerText = nombreProducto;
+    
+    // Muestra la animación
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+    
+    // Lo oculta a los 2.5 segundos
+    setTimeout(() => {
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('translate-y-20', 'opacity-0');
+    }, 2500);
+  }
+}
 
     function eliminarDelCarrito(index) {
       carrito.splice(index, 1);
