@@ -358,6 +358,46 @@
     function agregarAlCarrito(nombre, precio, esInstalable) {
       carrito.push({ nombre, precio, esInstalable });
       actualizarCarritoUI();
+
+      let categoriaActual = 'todas';
+
+function filtrarCategoria(categoria) {
+  categoriaActual = categoria;
+  
+  // Actualizar estilos de los botones de filtro
+  const botones = document.querySelectorAll('.btn-filtro');
+  botones.forEach(btn => {
+    btn.classList.remove('bg-brandRed', 'text-white');
+    btn.classList.add('bg-black', 'text-gray-300');
+  });
+  if (event && event.target) {
+    event.target.classList.add('bg-brandRed', 'text-white');
+    event.target.classList.remove('bg-black', 'text-gray-300');
+  }
+
+  filtrarProductos();
+}
+
+function filtrarProductos() {
+  const busquedaInput = document.getElementById('input-buscador');
+  const busqueda = busquedaInput ? busquedaInput.value.toLowerCase() : '';
+  const productos = document.querySelectorAll('.tarjeta-producto');
+
+  productos.forEach(producto => {
+    const elementoNombre = producto.querySelector('.nombre-producto');
+    const nombre = elementoNombre ? elementoNombre.innerText.toLowerCase() : '';
+    const categoriaProducto = producto.getAttribute('data-categoria');
+
+    const coincideCategoria = (categoriaActual === 'todas' || categoriaProducto === categoriaActual);
+    const coincideBusqueda = nombre.includes(busqueda);
+
+    if (coincideCategoria && coincideBusqueda) {
+      producto.style.display = 'flex';
+    } else {
+      producto.style.display = 'none';
+    }
+  });
+}
   
   // Esta línea llama al cartel flotante
   mostrarToast(nombre);
