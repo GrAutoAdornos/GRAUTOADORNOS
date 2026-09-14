@@ -359,20 +359,22 @@
       carrito.push({ nombre, precio, esInstalable });
       actualizarCarritoUI();
 
-      let categoriaActual = 'todas';
+   let categoriaActual = 'todas';
 
-function filtrarCategoria(categoria) {
+function filtrarCategoria(categoria, elemento) {
   categoriaActual = categoria;
   
-  // Actualizar estilos de los botones de filtro
+  // Limpia estilos de todos los botones
   const botones = document.querySelectorAll('.btn-filtro');
   botones.forEach(btn => {
     btn.classList.remove('bg-brandRed', 'text-white');
     btn.classList.add('bg-black', 'text-gray-300');
   });
-  if (event && event.target) {
-    event.target.classList.add('bg-brandRed', 'text-white');
-    event.target.classList.remove('bg-black', 'text-gray-300');
+
+  // Resalta el botón clickeado
+  if (elemento) {
+    elemento.classList.add('bg-brandRed', 'text-white');
+    elemento.classList.remove('bg-black', 'text-gray-300');
   }
 
   filtrarProductos();
@@ -380,7 +382,7 @@ function filtrarCategoria(categoria) {
 
 function filtrarProductos() {
   const busquedaInput = document.getElementById('input-buscador');
-  const busqueda = busquedaInput ? busquedaInput.value.toLowerCase() : '';
+  const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
   const productos = document.querySelectorAll('.tarjeta-producto');
 
   productos.forEach(producto => {
