@@ -26,6 +26,7 @@
             brandRed: '#E50914',
             brandDark: '#0D0D0D',
             brandCard: '#181818',
+            brandGray: '#1a1a1a'
           }
         }
       }
@@ -50,14 +51,14 @@
       <!-- Logo y Nombre -->
       <a href="#" class="flex items-center space-x-3">
         <img src="LOGO NEGRO.jpeg" alt="GR Auto Adornos Logo" class="h-12 w-auto object-contain rounded">
-        <div class="hidden sm:block">
-          <span class="text-xl font-black text-white tracking-wider block leading-none">GR AUTO ADORNOS</span>
-          <span class="text-[10px] text-brandRed font-bold tracking-widest uppercase">Customization & Detailing</span>
+        <div>
+          <span class="text-lg sm:text-xl font-black text-white tracking-wider block leading-none">GR AUTO ADORNOS</span>
+          <span class="text-[9px] sm:text-[10px] text-brandRed font-bold tracking-widest uppercase">Customization & Detailing</span>
         </div>
       </a>
 
-      <!-- Navegación, Redes y Carrito -->
-      <nav class="flex items-center space-x-4">
+      <!-- Navegación Desktop -->
+      <nav class="hidden md:flex items-center space-x-4">
         <a href="https://wa.me/18494040514" target="_blank" class="text-green-500 hover:text-green-400 text-2xl transition" title="WhatsApp">
           <i class="fab fa-whatsapp"></i>
         </a>
@@ -69,6 +70,36 @@
           <span id="cart-count" class="ml-2 bg-white text-black text-xs font-bold px-2 py-0.5 rounded-full">0</span>
         </button>
       </nav>
+
+      <!-- Botón Menú Hamburguesa Móvil -->
+      <div class="flex items-center space-x-3 md:hidden">
+        <button onclick="abrirCarrito()" class="relative bg-brandRed text-white p-2 rounded-lg flex items-center">
+          <i class="fas fa-shopping-cart"></i>
+          <span id="cart-count-mobile" class="ml-1 bg-white text-black text-xs font-bold px-1.5 py-0.2 rounded-full">0</span>
+        </button>
+
+        <button id="btn-mobile-menu" onclick="toggleMobileMenu()" class="text-white text-2xl focus:outline-none p-1">
+          <i id="icon-mobile-menu" class="fas fa-bars"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Menú Desplegable Móvil -->
+    <div id="mobile-menu" class="hidden md:hidden bg-brandCard border-t border-gray-800 px-4 py-4 space-y-4">
+      <a href="#catalogo" onclick="toggleMobileMenu()" class="block text-sm font-bold text-gray-200 hover:text-brandRed transition">
+        <i class="fas fa-store mr-2 text-brandRed"></i> Catálogo de Productos
+      </a>
+      <div class="border-t border-gray-800 pt-3 flex items-center justify-around">
+        <a href="https://wa.me/18494040514" target="_blank" class="flex items-center space-x-2 text-green-500 font-bold text-sm">
+          <i class="fab fa-whatsapp text-xl"></i>
+          <span>WhatsApp</span>
+        </a>
+        <a href="https://www.instagram.com/gr.autoadorno/" target="_blank" class="flex items-center space-x-2 text-pink-500 font-bold text-sm">
+          <i class="fab fa-instagram text-xl"></i>
+          <span>Instagram</span>
+        </a>
+      </div>
     </div>
   </header>
 
@@ -86,94 +117,123 @@
   <main id="catalogo" class="max-w-7xl mx-auto px-4 py-12 flex-grow">
     <h2 class="text-2xl font-black text-center mb-10 border-b-2 border-brandRed inline-block pb-2 tracking-wider">NUESTROS PRODUCTOS</h2>
 
-    <!-- SECCIÓN DE BÚSQUEDA Y FILTROS -->
-<div class="max-w-7xl mx-auto px-4 my-8">
-  <div class="flex flex-col md:flex-row gap-4 justify-between items-center bg-gray-900 p-4 rounded-xl border border-gray-800">
-    
-    <!-- Buscador en tiempo real -->
-    <div class="relative w-full md:w-1/3">
-      <input 
-        type="text" 
-        id="input-buscador" 
-        onkeyup="filtrarProductos()" 
-        placeholder="Buscar producto (ej: Pantalla, LED...)" 
-        class="w-full bg-black border border-gray-700 text-white px-4 py-2 pl-10 rounded-lg focus:outline-none focus:border-brandRed transition text-sm"
-      >
-      <i class="fas fa-search absolute left-3 top-3 text-gray-500 text-xs"></i>
-    </div>
+    <!-- SECCIÓN DE BÚSQUEDA Y FILTRO DESPLEGABLE -->
+    <div class="max-w-7xl mx-auto px-4 my-8">
+      <div class="flex flex-col sm:flex-row gap-3 items-center bg-gray-900 p-4 rounded-xl border border-gray-800">
+        
+        <!-- BOTÓN DE MENÚ CATEGORÍAS (Dropdown) -->
+        <div class="relative w-full sm:w-auto">
+          <button onclick="toggleDemoDropdown()" class="w-full sm:w-auto bg-brandGray text-white border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between sm:justify-start gap-2 hover:border-brandRed active:scale-95 transition-all duration-150">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-brandRed" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+              <span id="label-categoria" class="font-bold">Categorías</span>
+            </div>
+            <svg class="w-3 h-3 text-gray-400 ml-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
 
-    <!-- Botones de Filtro por Categoría -->
-    <div class="flex flex-wrap gap-2 w-full md:w-auto justify-center">
-      <button onclick="filtrarCategoria('todas', this)" class="btn-filtro active bg-brandRed text-white px-4 py-2 rounded-lg text-xs font-bold transition">Todas</button>
-      <button onclick="filtrarCategoria('electronica', this)" class="btn-filtro bg-black border border-gray-800 hover:border-brandRed text-gray-300 px-4 py-2 rounded-lg text-xs font-bold transition">Electrónica</button>
-      <button onclick="filtrarCategoria('iluminacion', this)" class="btn-filtro bg-black border border-gray-800 hover:border-brandRed text-gray-300 px-4 py-2 rounded-lg text-xs font-bold transition">Iluminación</button>
-      <button onclick="filtrarCategoria('accesorios', this)" class="btn-filtro bg-black border border-gray-800 hover:border-brandRed text-gray-300 px-4 py-2 rounded-lg text-xs font-bold transition">Accesorios</button>
-  </div>
-      
-  </div>
-</div>
+          <!-- LISTA DESPLEGABLE (Dropdown Menu) -->
+          <div id="demo-dropdown" class="hidden absolute left-0 top-full mt-2 w-56 bg-brandCard border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-gray-800/50">
+            <div class="px-3 py-2 text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Filtrar por:</div>
+            <button onclick="selectCategory('todas', 'Todas las categorías')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Todas las categorías</span>
+              <span class="text-[10px] text-gray-500 group-hover:text-white">Ver todo</span>
+            </button>
+            <button onclick="selectCategory('electronica', 'Electrónica')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Electrónica</span>
+              <span class="text-[10px] opacity-60">📻</span>
+            </button>
+            <button onclick="selectCategory('iluminacion', 'Iluminación')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Iluminación</span>
+              <span class="text-[10px] opacity-60">💡</span>
+            </button>
+            <button onclick="selectCategory('accesorios', 'Accesorios')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Accesorios</span>
+              <span class="text-[10px] opacity-60">🚗</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Buscador en tiempo real -->
+        <div class="relative w-full flex-1">
+          <input 
+            type="text" 
+            id="input-buscador" 
+            onkeyup="filtrarProductos()" 
+            placeholder="Buscar producto (ej: Pantalla, LED...)" 
+            class="w-full bg-black border border-gray-700 text-white px-4 py-2.5 pl-10 rounded-xl focus:outline-none focus:border-brandRed transition text-xs"
+          >
+          <i class="fas fa-search absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+        </div>
+          
+      </div>
+    </div>
     
     <!-- CONTENEDOR PRINCIPAL DEL CATÁLOGO -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-  <!-- PRODUCTO 1: Pantalla Android -->
-  <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="electronica">
-    <div>
-      <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
-        <img src="pantalla.jpg" alt="Pantalla Android" class="w-full h-full object-cover onError="this.style.display='none'">
-        <i class="fas fa-tv text-4xl text-brandRed"></i>
+      <!-- PRODUCTO 1: Pantalla Android -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="electronica">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="pantalla.jpg" alt="Pantalla Android" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-tv text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ELECTRONICA (INSTALABLE)</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Pantalla Android HD Universal</h3>
+          <p class="text-gray-400 text-xs mb-4">Pantalla táctil HD, GPS, Bluetooth, Apple CarPlay y Android Auto.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 12,500</p>
+          <button onclick="agregarAlCarrito('Pantalla Android HD Universal', 12500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
       </div>
-      <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ELECTRONICA (INSTALABLE)</span>
-      <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Pantalla Android HD Universal</h3>
-      <p class="text-gray-400 text-xs mb-4">Pantalla táctil HD, GPS, Bluetooth, Apple CarPlay y Android Auto.</p>
-    </div>
-    <div>
-      <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 12,500</p>
-      <button onclick="agregarAlCarrito('Pantalla Android HD Universal', 12500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
-        + Añadir al Carrito
-      </button>
-    </div>
-  </div>
 
-  <!-- PRODUCTO 2: Kit Luces LED -->
-  <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="iluminacion">
-    <div>
-      <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
-        <img src="luces.jpg" alt="Kit Luces LED" class="w-full h-full object-cover onError="this.style.display='none'">
-        <i class="fas fa-bolt text-4xl text-brandRed"></i>
+      <!-- PRODUCTO 2: Kit Luces LED -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="iluminacion">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="luces.jpg" alt="Kit Luces LED" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-bolt text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ILUMINACIÓN (INSTALABLE)</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit Luces LED Alta Potencia</h3>
+          <p class="text-gray-400 text-xs mb-4">Luz blanca ultra brillante, mayor visibilidad nocturna e instalación limpia.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 3,500</p>
+          <button onclick="agregarAlCarrito('Kit Luces LED Alta Potencia', 3500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
       </div>
-      <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ILUMINACIÓN (INSTALABLE)</span>
-      <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit Luces LED Alta Potencia</h3>
-      <p class="text-gray-400 text-xs mb-4">Luz blanca ultra brillante, mayor visibilidad nocturna e instalación limpia.</p>
-    </div>
-    <div>
-      <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 3,500</p>
-      <button onclick="agregarAlCarrito('Kit Luces LED Alta Potencia', 3500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
-        + Añadir al Carrito
-      </button>
-    </div>
-  </div>
 
-  <!-- PRODUCTO 3: Limpia Cristales -->
-  <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="accesorios">
-    <div>
-      <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
-        <img src="limpia-cristales.jpg" alt="Limpia Cristales" class="w-full h-full object-cover onError="this.style.display='none'">
-        <i class="fas fa-spray-can text-4xl text-brandRed"></i>
+      <!-- PRODUCTO 3: Limpia Cristales -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="accesorios">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="limpia-cristales.jpg" alt="Limpia Cristales" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-spray-can text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 font-bold px-2 py-1 rounded">ACCESORIOS</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit de Limpieza y Limpia Cristales</h3>
+          <p class="text-gray-400 text-xs mb-4">Microfibra y detallado rápido de alta calidad para vidrios y carrocería.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 800</p>
+          <button onclick="agregarAlCarrito('Kit de Limpieza y Limpia Cristales', 800, false)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
       </div>
-      <span class="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 font-bold px-2 py-1 rounded">ACCESORIOS</span>
-      <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit de Limpieza y Limpia Cristales</h3>
-      <p class="text-gray-400 text-xs mb-4">Microfibra y detallado rápido de alta calidad para vidrios y carrocería.</p>
-    </div>
-    <div>
-      <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 800</p>
-      <button onclick="agregarAlCarrito('Kit de Limpieza y Limpia Cristales', 800, false)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
-        + Añadir al Carrito
-      </button>
-    </div>
-  </div>
 
-</div>
+    </div>
+  </main>
 
   <!-- MODAL DEL CARRITO DE COMPRA / CHECKOUT -->
   <div id="modal-carrito" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden p-4">
@@ -322,7 +382,7 @@
     </div>
   </footer>
 
-<!-- Firebase SDK (Modulo v12) -->
+  <!-- Firebase SDK (Modulo v12) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
@@ -372,24 +432,46 @@
       'FORANEO': 300
     };
 
-    // --- FUNCIONES DE FILTRADO Y BÚSQUEDA ---
-    function filtrarCategoria(categoria, elemento) {
-      categoriaActual = categoria;
+    // --- MENÚ MÓVIL CABECERA ---
+    function toggleMobileMenu() {
+      const menu = document.getElementById('mobile-menu');
+      const icon = document.getElementById('icon-mobile-menu');
       
-      const botones = document.querySelectorAll('.btn-filtro');
-      botones.forEach(btn => {
-        btn.classList.remove('bg-brandRed', 'text-white');
-        btn.classList.add('bg-black', 'text-gray-300');
-      });
-
-      if (elemento) {
-        elemento.classList.add('bg-brandRed', 'text-white');
-        elemento.classList.remove('bg-black', 'text-gray-300');
+      menu.classList.toggle('hidden');
+      if (menu.classList.contains('hidden')) {
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+      } else {
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
       }
+    }
 
+    // --- DROPDOWN DE CATEGORÍAS DEL CATÁLOGO ---
+    function toggleDemoDropdown() {
+      const menu = document.getElementById('demo-dropdown');
+      menu.classList.toggle('hidden');
+    }
+
+    function selectCategory(idCategoria, nombreEtiqueta) {
+      categoriaActual = idCategoria;
+      document.getElementById('label-categoria').innerText = idCategoria === 'todas' ? 'Categorías' : nombreEtiqueta;
+      toggleDemoDropdown();
       filtrarProductos();
     }
 
+    // Cerrar el menú desplegable al hacer clic fuera
+    document.addEventListener('click', function(event) {
+      const menu = document.getElementById('demo-dropdown');
+      const button = menu ? menu.previousElementSibling : null;
+      if (menu && !menu.classList.contains('hidden')) {
+        if (!menu.contains(event.target) && (!button || !button.contains(event.target))) {
+          menu.classList.add('hidden');
+        }
+      }
+    });
+
+    // --- FUNCIONES DE FILTRADO Y BÚSQUEDA ---
     function filtrarProductos() {
       const busquedaInput = document.getElementById('input-buscador');
       const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
@@ -441,6 +523,9 @@
 
     function actualizarCarritoUI() {
       document.getElementById('cart-count').innerText = carrito.length;
+      const mobileCount = document.getElementById('cart-count-mobile');
+      if (mobileCount) mobileCount.innerText = carrito.length;
+
       const container = document.getElementById('cart-items');
       
       if (carrito.length === 0) {
