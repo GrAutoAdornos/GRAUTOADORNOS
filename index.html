@@ -322,7 +322,7 @@
     </div>
   </footer>
 
- <!-- Firebase SDK (Modulo v12) & Lógica -->
+<!-- Firebase SDK (Modulo v12) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
@@ -337,126 +337,326 @@
       measurementId: "G-XD4DMESRJ4"
     };
 
+    // Inicializar Firebase y Firestore
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const form = document.getElementById('booking-form');
-    if (form) {
-      form.addEventListener('submit', async function(event) {
-        event.preventDefault();
+    // Hacer la función accesible globalmente para el formulario
+    window.guardarPedidoFirebase = async function(datosPedido) {
+      try {
+        const docRef = await addDoc(collection(db, "pedidos"), {
+          ...datosPedido,
+          fechaRegistro: serverTimestamp()
+        });
+        console.log("Pedido guardado exitosamente en Firestore con ID:", docRef.id);
+        return true;
+      } catch (e) {
+        console.error("Error al guardar en Firebase:", e);
+        return false;
+      }
+    };
+  </script>
 
-        if (carrito.length === 0) {
-          alert("El carrito está vacío. Agrega al menos un producto.");
-          return;
+  <!-- Lógica de Negocio, Carrito y Procesamiento -->
+  <script>
+    let carrito = [];
+    let categoriaActual = 'todas';
+    const COSTO_INSTALACION = 1000;
+    const citasOcupadas = {};
+
+    const TARIFAS_ENVIO = {
+      'DN': 250,
+      'SDO': 250,
+      'SDN': 300,
+      'SDE': 300,
+      'FORANEO': 300
+    };
+
+    // --- FUNCIONES DE FILTRADO Y BÚSQUEDA ---
+    function filtrarCategoria(categoria, elemento) {
+      categoriaActual = categoria;
+      
+      const botones = document.querySelectorAll('.btn-filtro');
+      botones.forEach(btn => {
+        btn.classList.remove('bg-brandRed', 'text-white');
+        btn.classList.add('bg-black', 'text-gray-300');
+      });
+
+      if (elemento) {
+        elemento.classList.add('bg-brandRed', 'text-white');
+        elemento.classList.remove('bg-black', 'text-gray-300');
+      }
+
+      filtrarProductos();
+    }
+
+    function filtrarProductos() {
+      const busquedaInput = document.getElementById('input-buscador');
+      const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
+      const productos = document.querySelectorAll('.tarjeta-producto');
+
+      productos.forEach(producto => {
+        const elementoNombre = producto.querySelector('.nombre-producto');
+        const nombre = elementoNombre ? elementoNombre.innerText.toLowerCase() : '';
+        const categoriaProducto = producto.getAttribute('data-categoria');
+
+        const coincideCategoria = (categoriaActual === 'todas' || categoriaProducto === categoriaActual);
+        const coincideBusqueda = nombre.includes(busqueda);
+
+        if (coincideCategoria && coincideBusqueda) {
+          producto.style.display = 'flex';
+        } else {
+          producto.style.display = 'none';
         }
-
-        const requiereInstalacion = document.getElementById('requiere_instalacion').checked;
-        const fecha = document.getElementById('fecha_cita').value;
-        const hora = document.getElementById('hora_cita').value;
-        const metodoPago = document.getElementById('metodo_pago').value;
-
-        if (requiereInstalacion && (!fecha || !hora)) {
-          alert("Por favor completa la fecha y la hora para agendar tu cita.");
-          return;
-        }
-
-        const datosPedido = {
-          cliente: {
-            nombre: document.getElementById('user_name').value,
-            email: document.getElementById('user_email').value,
-            direccion: {
-              calle: document.getElementById('direccion_calle').value,
-              apartamento: document.getElementById('direccion_apt').value,
-              sector: document.getElementById('direccion_sector').value,
-              zona: document.getElementById('ciudad_envio').value
-            }
-          },
-          productos: carrito,
-          total: document.getElementById('total_price_input').value,
-          instalacion: {
-            requerida: requiereInstalacion,
-            fecha: fecha || "N/A",
-            hora: hora || "N/A"
-          },
-          metodoPago: metodoPago,
-          estado: "Pendiente"
-        };
-
-        // 1. Guardar en Firestore
-        try {
-          await addDoc(collection(db, "pedidos"), {
-            ...datosPedido,
-            fechaRegistro: serverTimestamp()
-          });
-        } catch (err) {
-          console.error("Error Firestore:", err);
-        }
-
-        // 2. Preparar bloque de Cita
-        let bloqueCitaHTML = "";
-        if (requiereInstalacion) {
-          bloqueCitaHTML = `
-            <div style="background-color: #2b1d0c; border: 1px solid #d97706; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-              <h3 style="color: #f59e0b; margin-top: 0; font-size: 15px;">📅 CITA DE INSTALACIÓN AGENDADA</h3>
-              <p style="margin: 5px 0; font-size: 14px; color: #fef3c7;"><strong>Día:</strong> ${fecha}</p>
-              <p style="margin: 5px 0; font-size: 14px; color: #fef3c7;"><strong>Hora:</strong> ${hora}</p>
-              <p style="margin: 5px 0; font-size: 13px; color: #fde68a;">Tu cita ha sido reservada con éxito. Un técnico se pondrá en contacto pronto para confirmar el inicio del trabajo.</p>
-            </div>
-          `;
-        }
-
-        // 3. Preparar bloque de Transferencia Bancaria
-        let bloqueBancosHTML = "";
-        if (metodoPago.toLowerCase().includes("transferencia")) {
-          bloqueBancosHTML = `
-            <div style="background-color: #1a1a2e; border: 1px solid #3b82f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-              <h3 style="color: #60a5fa; margin-top: 0; font-size: 15px;">💳 DATOS PARA TRANSFERENCIA BANCARIA</h3>
-              <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 10px;">Realiza tu depósito o transferencia a cualquiera de nuestras cuentas:</p>
-              
-              <ul style="padding-left: 20px; font-size: 13px; color: #ffffff; line-height: 1.7;">
-                <li><strong>POPULAR:</strong> 814423729 (Titular: Landra Guzmán)</li>
-                <li><strong>BANRESERVAS:</strong> 9605170252 (Titular: Freddy Rodríguez)</li>
-                <li><strong>BHD:</strong> 39485910015 (Titular: Freddy Rodríguez)</li>
-                <li><strong>QIK:</strong> 1006620357 (Titular: Freddy Rodríguez)</li>
-                <li><strong>ZELLE ($USD):</strong> landra2916@gmail.com (Titular: Landra Guzmán)</li>
-              </ul>
-              <p style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Por favor, envía el comprobante de pago por WhatsApp al <strong>849-404-0514</strong> adjuntando tu nombre.</p>
-            </div>
-          `;
-        }
-
-        // 4. Parámetros para EmailJS
-        const templateParams = {
-          order_id: Date.now().toString().slice(-5),
-          user_name: datosPedido.cliente.nombre,
-          user_email: datosPedido.cliente.email,
-          direccion: `${datosPedido.cliente.direccion.calle}, ${datosPedido.cliente.direccion.apartamento}, ${datosPedido.cliente.direccion.sector}, Zona: ${datosPedido.cliente.direccion.zona}`,
-          cart_summary: document.getElementById('cart_summary_input').value,
-          total_price: datosPedido.total,
-          metodo_pago: datosPedido.metodoPago,
-          bloque_cita: bloqueCitaHTML,
-          bloque_bancos: bloqueBancosHTML
-        };
-
-        emailjs.send('service_jfx0g2e', 'template_mhdgbsw', templateParams)
-          .then(function() {
-              alert('¡Orden registrada! Se ha enviado la confirmación detallada por correo.');
-              
-              if (requiereInstalacion && fecha && hora) {
-                const horaCode = hora.includes('1:00') ? '13:00' : '16:00';
-                if (!citasOcupadas[fecha]) citasOcupadas[fecha] = [];
-                citasOcupadas[fecha].push(horaCode);
-              }
-
-              carrito = [];
-              actualizarCarritoUI();
-              document.getElementById('booking-form').reset();
-              cerrarCarrito();
-          }, function(error) {
-              alert('Ocurrió un error al enviar el correo: ' + JSON.stringify(error));
-          });
       });
     }
+
+    // --- FUNCIONES DEL CARRITO ---
+    function agregarAlCarrito(nombre, precio, esInstalable) {
+      carrito.push({ nombre, precio, esInstalable });
+      actualizarCarritoUI();
+      mostrarToast(nombre);
+    }
+
+    function mostrarToast(nombreProducto) {
+      const toast = document.getElementById('toast-notification');
+      const toastName = document.getElementById('toast-product-name');
+      
+      if (toast && toastName) {
+        toastName.innerText = nombreProducto;
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+        
+        setTimeout(() => {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-20', 'opacity-0');
+        }, 2500);
+      }
+    }
+
+    function eliminarDelCarrito(index) {
+      carrito.splice(index, 1);
+      actualizarCarritoUI();
+    }
+
+    function actualizarCarritoUI() {
+      document.getElementById('cart-count').innerText = carrito.length;
+      const container = document.getElementById('cart-items');
+      
+      if (carrito.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm">El carrito está vacío.</p>';
+        document.getElementById('contenedor-instalacion').classList.add('hidden');
+        document.getElementById('requiere_instalacion').checked = false;
+        toggleInstalacion();
+        calcularTotales();
+        return;
+      }
+
+      let html = '';
+      let tieneInstalables = false;
+
+      carrito.forEach((prod, index) => {
+        if (prod.esInstalable) tieneInstalables = true;
+        html += `
+          <div class="flex justify-between items-center bg-gray-900 p-2.5 rounded border border-gray-800">
+            <span class="text-xs font-medium">${prod.nombre}</span>
+            <div class="flex items-center space-x-3">
+              <span class="text-brandRed font-bold text-xs">RD$ ${prod.precio.toLocaleString()}</span>
+              <button onclick="eliminarDelCarrito(${index})" class="text-gray-500 hover:text-red-500 font-bold text-sm">&times;</button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+
+      const contInst = document.getElementById('contenedor-instalacion');
+      if (tieneInstalables) {
+        contInst.classList.remove('hidden');
+      } else {
+        contInst.classList.add('hidden');
+        document.getElementById('requiere_instalacion').checked = false;
+        toggleInstalacion();
+      }
+
+      calcularTotales();
+    }
+
+    function calcularTotales() {
+      let subtotal = carrito.reduce((acc, p) => acc + p.precio, 0);
+      const requiereInst = document.getElementById('requiere_instalacion').checked;
+      const zona = document.getElementById('ciudad_envio').value;
+      
+      let costoEnvio = TARIFAS_ENVIO[zona] || 0;
+
+      if (requiereInst) {
+        costoEnvio = 0;
+      }
+
+      let totalFinal = subtotal + (requiereInst ? COSTO_INSTALACION : 0) + costoEnvio;
+
+      document.getElementById('cart-subtotal').innerText = 'RD$ ' + subtotal.toLocaleString();
+      document.getElementById('cart-shipping-cost').innerText = requiereInst ? '¡GRATIS! (Instalación)' : (zona ? 'RD$ ' + costoEnvio.toLocaleString() : 'Selecciona zona');
+      document.getElementById('cart-total').innerText = 'RD$ ' + totalFinal.toLocaleString();
+
+      document.getElementById('cart_summary_input').value = carrito.map(p => p.nombre).join(', ');
+      document.getElementById('total_price_input').value = 'RD$ ' + totalFinal.toLocaleString();
+    }
+
+    function abrirCarrito() {
+      document.getElementById('modal-carrito').classList.remove('hidden');
+    }
+
+    function cerrarCarrito() {
+      document.getElementById('modal-carrito').classList.add('hidden');
+    }
+
+    function toggleInstalacion() {
+      const requiere = document.getElementById('requiere_instalacion').checked;
+      const seccionCita = document.getElementById('seccion-cita');
+      const rowInst = document.getElementById('row-instalacion');
+      const inputFecha = document.getElementById('fecha_cita');
+
+      if (requiere) {
+        seccionCita.classList.remove('hidden');
+        rowInst.classList.remove('hidden');
+        inputFecha.required = true;
+      } else {
+        seccionCita.classList.add('hidden');
+        rowInst.classList.add('hidden');
+        document.getElementById('alerta-pago').classList.add('hidden');
+        inputFecha.required = false;
+      }
+
+      calcularTotales();
+    }
+
+    function validarFechaYHorarios() {
+      const fechaInput = document.getElementById('fecha_cita').value;
+      const horaSelect = document.getElementById('hora_cita');
+      const alertaPago = document.getElementById('alerta-pago');
+      
+      if (!fechaInput) return;
+
+      const dateObj = new Date(fechaInput + 'T00:00:00');
+      const diaSemana = dateObj.getDay();
+
+      if (diaSemana !== 6) {
+        alert("Las citas de instalación son únicamente los días Sábado.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Selecciona un sábado</option>';
+        return;
+      }
+
+      const horasReservadas = citasOcupadas[fechaInput] || [];
+      if (horasReservadas.length >= 2) {
+        alert("La agenda de este día está llena. Por favor elige el próximo sábado.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Agenda llena</option>';
+        return;
+      }
+
+      const turnosPosibles = [
+        { hora: '13:00', label: '1:00 PM' },
+        { hora: '16:00', label: '4:00 PM' }
+      ];
+
+      let opciones = '<option value="">Selecciona una hora</option>';
+      turnosPosibles.forEach(turno => {
+        if (!horasReservadas.includes(turno.hora)) {
+          opciones += `<option value="${turno.label}">${turno.label}</option>`;
+        }
+      });
+      horaSelect.innerHTML = opciones;
+
+      const hoy = new Date();
+      const difDias = Math.ceil((dateObj - hoy) / (1000 * 60 * 60 * 24));
+
+      if (difDias >= 14) {
+        alertaPago.classList.remove('hidden');
+        document.getElementById('metodo_pago').value = 'Transferencia Bancaria';
+      } else {
+        alertaPago.classList.add('hidden');
+      }
+    }
+
+    // ENVÍO DE PEDIDO: ALMACENAMIENTO EN FIREBASE Y NOTIFICACIÓN POR EMAILJS
+    document.getElementById('booking-form').addEventListener('submit', async function(event) {
+      event.preventDefault();
+
+      if (carrito.length === 0) {
+        alert("El carrito está vacío. Agrega al menos un producto.");
+        return;
+      }
+
+      const requiereInstalacion = document.getElementById('requiere_instalacion').checked;
+      const fecha = document.getElementById('fecha_cita').value;
+      const hora = document.getElementById('hora_cita').value;
+
+      if (requiereInstalacion && (!fecha || !hora)) {
+        alert("Por favor completa la fecha y la hora para agendar tu cita.");
+        return;
+      }
+
+      // Estructura completa de datos del cliente y pedido
+      const datosPedido = {
+        cliente: {
+          nombre: document.getElementById('user_name').value,
+          email: document.getElementById('user_email').value,
+          direccion: {
+            calle: document.getElementById('direccion_calle').value,
+            apartamento: document.getElementById('direccion_apt').value,
+            sector: document.getElementById('direccion_sector').value,
+            zona: document.getElementById('ciudad_envio').value
+          }
+        },
+        productos: carrito,
+        total: document.getElementById('total_price_input').value,
+        instalacion: {
+          requerida: requiereInstalacion,
+          fecha: fecha || "N/A",
+          hora: hora || "N/A"
+        },
+        metodoPago: document.getElementById('metodo_pago').value,
+        estado: "Pendiente"
+      };
+
+      // 1. Guardar en Firebase Firestore
+      if (window.guardarPedidoFirebase) {
+        await window.guardarPedidoFirebase(datosPedido);
+      }
+
+      // 2. Enviar la notificación por correo con EmailJS
+      const templateParams = {
+        user_name: datosPedido.cliente.nombre,
+        user_email: datosPedido.cliente.email,
+        direccion: `${datosPedido.cliente.direccion.calle}, ${datosPedido.cliente.direccion.apartamento}, ${datosPedido.cliente.direccion.sector}, Zona: ${datosPedido.cliente.direccion.zona}`,
+        cart_summary: document.getElementById('cart_summary_input').value,
+        total_price: datosPedido.total,
+        requiere_instalacion: requiereInstalacion ? "Sí" : "No",
+        fecha_cita: datosPedido.instalacion.fecha,
+        hora_cita: datosPedido.instalacion.hora,
+        metodo_pago: datosPedido.metodoPago
+      };
+
+      emailjs.send('service_jfx0g2e', 'template_mhdgbsw', templateParams)
+        .then(function() {
+            alert('¡Orden recibida y registrada exitosamente!');
+            
+            if (requiereInstalacion && fecha && hora) {
+              const horaCode = hora.includes('1:00') ? '13:00' : '16:00';
+              if (!citasOcupadas[fecha]) citasOcupadas[fecha] = [];
+              citasOcupadas[fecha].push(horaCode);
+            }
+
+            carrito = [];
+            actualizarCarritoUI();
+            document.getElementById('booking-form').reset();
+            cerrarCarrito();
+        }, function(error) {
+            alert('El pedido se registró en el sistema pero ocurrió un error al enviar el correo: ' + JSON.stringify(error));
+        });
+    });
   </script>
 </body>
 </html>
