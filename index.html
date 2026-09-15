@@ -322,10 +322,10 @@
     </div>
   </footer>
 
-  <!-- Firebase SDK -->
+  <!-- Firebase SDK (Modulo v12) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDDJltPlA8kjDzWnYFNkQnRBxFylSH52Tg",
@@ -337,11 +337,27 @@
       measurementId: "G-XD4DMESRJ4"
     };
 
+    // Inicializar Firebase y Firestore
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
+    const db = getFirestore(app);
+
+    // Hacer la función accesible globalmente para el formulario
+    window.guardarPedidoFirebase = async function(datosPedido) {
+      try {
+        const docRef = await addDoc(collection(db, "pedidos"), {
+          ...datosPedido,
+          fechaRegistro: serverTimestamp()
+        });
+        console.log("Pedido guardado exitosamente en Firestore con ID:", docRef.id);
+        return true;
+      } catch (e) {
+        console.error("Error al guardar en Firebase:", e);
+        return false;
+      }
+    };
   </script>
 
-  <!-- Lógica de Negocio y Carrito -->
+  <!-- Lógica de Negocio, Carrito y Procesamiento -->
   <script>
     let carrito = [];
     let categoriaActual = 'todas';
@@ -360,14 +376,12 @@
     function filtrarCategoria(categoria, elemento) {
       categoriaActual = categoria;
       
-      // Limpia estilos de todos los botones
       const botones = document.querySelectorAll('.btn-filtro');
       botones.forEach(btn => {
         btn.classList.remove('bg-brandRed', 'text-white');
         btn.classList.add('bg-black', 'text-gray-300');
       });
 
-      // Resalta el botón clickeado
       if (elemento) {
         elemento.classList.add('bg-brandRed', 'text-white');
         elemento.classList.remove('bg-black', 'text-gray-300');
@@ -410,12 +424,9 @@
       
       if (toast && toastName) {
         toastName.innerText = nombreProducto;
-        
-        // Muestra la animación
         toast.classList.remove('translate-y-20', 'opacity-0');
         toast.classList.add('translate-y-0', 'opacity-100');
         
-        // Lo oculta a los 2.5 segundos
         setTimeout(() => {
           toast.classList.remove('translate-y-0', 'opacity-100');
           toast.classList.add('translate-y-20', 'opacity-0');
@@ -569,7 +580,8 @@
       }
     }
 
-    document.getElementById('booking-form').addEventListener('submit', function(event) {
+    // ENVÍO DE PEDIDO: ALMACENAMIENTO EN FIREBASE Y NOTIFICACIÓN POR EMAILJS
+    document.getElementById('booking-form').addEventListener('submit', async function(event) {
       event.preventDefault();
 
       if (carrito.length === 0) {
@@ -586,21 +598,50 @@
         return;
       }
 
+      // Estructura completa de datos del cliente y pedido
+      const datosPedido = {
+        cliente: {
+          nombre: document.getElementById('user_name').value,
+          email: document.getElementById('user_email').value,
+          direccion: {
+            calle: document.getElementById('direccion_calle').value,
+            apartamento: document.getElementById('direccion_apt').value,
+            sector: document.getElementById('direccion_sector').value,
+            zona: document.getElementById('ciudad_envio').value
+          }
+        },
+        productos: carrito,
+        total: document.getElementById('total_price_input').value,
+        instalacion: {
+          requerida: requiereInstalacion,
+          fecha: fecha || "N/A",
+          hora: hora || "N/A"
+        },
+        metodoPago: document.getElementById('metodo_pago').value,
+        estado: "Pendiente"
+      };
+
+      // 1. Guardar en Firebase Firestore
+      if (window.guardarPedidoFirebase) {
+        await window.guardarPedidoFirebase(datosPedido);
+      }
+
+      // 2. Enviar la notificación por correo con EmailJS
       const templateParams = {
-        user_name: document.getElementById('user_name').value,
-        user_email: document.getElementById('user_email').value,
-        direccion: `${document.getElementById('direccion_calle').value}, ${document.getElementById('direccion_apt').value}, ${document.getElementById('direccion_sector').value}, Zona: ${document.getElementById('ciudad_envio').value}`,
+        user_name: datosPedido.cliente.nombre,
+        user_email: datosPedido.cliente.email,
+        direccion: `${datosPedido.cliente.direccion.calle}, ${datosPedido.cliente.direccion.apartamento}, ${datosPedido.cliente.direccion.sector}, Zona: ${datosPedido.cliente.direccion.zona}`,
         cart_summary: document.getElementById('cart_summary_input').value,
-        total_price: document.getElementById('total_price_input').value,
+        total_price: datosPedido.total,
         requiere_instalacion: requiereInstalacion ? "Sí" : "No",
-        fecha_cita: fecha || "N/A",
-        hora_cita: hora || "N/A",
-        metodo_pago: document.getElementById('metodo_pago').value
+        fecha_cita: datosPedido.instalacion.fecha,
+        hora_cita: datosPedido.instalacion.hora,
+        metodo_pago: datosPedido.metodoPago
       };
 
       emailjs.send('service_jfx0g2e', 'template_mhdgbsw', templateParams)
         .then(function() {
-            alert('¡Orden recibida exitosamente! Se ha enviado la confirmación a tu correo.');
+            alert('¡Orden recibida y registrada exitosamente!');
             
             if (requiereInstalacion && fecha && hora) {
               const horaCode = hora.includes('1:00') ? '13:00' : '16:00';
@@ -613,7 +654,7 @@
             document.getElementById('booking-form').reset();
             cerrarCarrito();
         }, function(error) {
-            alert('Error al procesar el pedido: ' + JSON.stringify(error));
+            alert('El pedido se registró en el sistema pero ocurrió un error al enviar el correo: ' + JSON.stringify(error));
         });
     });
   </script>
