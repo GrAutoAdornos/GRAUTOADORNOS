@@ -344,6 +344,7 @@
   <!-- Lógica de Negocio y Carrito -->
   <script>
     let carrito = [];
+    let categoriaActual = 'todas';
     const COSTO_INSTALACION = 1000;
     const citasOcupadas = {};
 
@@ -355,74 +356,72 @@
       'FORANEO': 300
     };
 
+    // --- FUNCIONES DE FILTRADO Y BÚSQUEDA ---
+    function filtrarCategoria(categoria, elemento) {
+      categoriaActual = categoria;
+      
+      // Limpia estilos de todos los botones
+      const botones = document.querySelectorAll('.btn-filtro');
+      botones.forEach(btn => {
+        btn.classList.remove('bg-brandRed', 'text-white');
+        btn.classList.add('bg-black', 'text-gray-300');
+      });
+
+      // Resalta el botón clickeado
+      if (elemento) {
+        elemento.classList.add('bg-brandRed', 'text-white');
+        elemento.classList.remove('bg-black', 'text-gray-300');
+      }
+
+      filtrarProductos();
+    }
+
+    function filtrarProductos() {
+      const busquedaInput = document.getElementById('input-buscador');
+      const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
+      const productos = document.querySelectorAll('.tarjeta-producto');
+
+      productos.forEach(producto => {
+        const elementoNombre = producto.querySelector('.nombre-producto');
+        const nombre = elementoNombre ? elementoNombre.innerText.toLowerCase() : '';
+        const categoriaProducto = producto.getAttribute('data-categoria');
+
+        const coincideCategoria = (categoriaActual === 'todas' || categoriaProducto === categoriaActual);
+        const coincideBusqueda = nombre.includes(busqueda);
+
+        if (coincideCategoria && coincideBusqueda) {
+          producto.style.display = 'flex';
+        } else {
+          producto.style.display = 'none';
+        }
+      });
+    }
+
+    // --- FUNCIONES DEL CARRITO ---
     function agregarAlCarrito(nombre, precio, esInstalable) {
       carrito.push({ nombre, precio, esInstalable });
       actualizarCarritoUI();
-
-   let categoriaActual = 'todas';
-
-function filtrarCategoria(categoria, elemento) {
-  categoriaActual = categoria;
-  
-  // Limpia estilos de todos los botones
-  const botones = document.querySelectorAll('.btn-filtro');
-  botones.forEach(btn => {
-    btn.classList.remove('bg-brandRed', 'text-white');
-    btn.classList.add('bg-black', 'text-gray-300');
-  });
-
-  // Resalta el botón clickeado
-  if (elemento) {
-    elemento.classList.add('bg-brandRed', 'text-white');
-    elemento.classList.remove('bg-black', 'text-gray-300');
-  }
-
-  filtrarProductos();
-}
-
-function filtrarProductos() {
-  const busquedaInput = document.getElementById('input-buscador');
-  const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
-  const productos = document.querySelectorAll('.tarjeta-producto');
-
-  productos.forEach(producto => {
-    const elementoNombre = producto.querySelector('.nombre-producto');
-    const nombre = elementoNombre ? elementoNombre.innerText.toLowerCase() : '';
-    const categoriaProducto = producto.getAttribute('data-categoria');
-
-    const coincideCategoria = (categoriaActual === 'todas' || categoriaProducto === categoriaActual);
-    const coincideBusqueda = nombre.includes(busqueda);
-
-    if (coincideCategoria && coincideBusqueda) {
-      producto.style.display = 'flex';
-    } else {
-      producto.style.display = 'none';
+      mostrarToast(nombre);
     }
-  });
-}
-  
-  // Esta línea llama al cartel flotante
-  mostrarToast(nombre);
-}
 
-function mostrarToast(nombreProducto) {
-  const toast = document.getElementById('toast-notification');
-  const toastName = document.getElementById('toast-product-name');
-  
-  if (toast && toastName) {
-    toastName.innerText = nombreProducto;
-    
-    // Muestra la animación
-    toast.classList.remove('translate-y-20', 'opacity-0');
-    toast.classList.add('translate-y-0', 'opacity-100');
-    
-    // Lo oculta a los 2.5 segundos
-    setTimeout(() => {
-      toast.classList.remove('translate-y-0', 'opacity-100');
-      toast.classList.add('translate-y-20', 'opacity-0');
-    }, 2500);
-  }
-}
+    function mostrarToast(nombreProducto) {
+      const toast = document.getElementById('toast-notification');
+      const toastName = document.getElementById('toast-product-name');
+      
+      if (toast && toastName) {
+        toastName.innerText = nombreProducto;
+        
+        // Muestra la animación
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+        
+        // Lo oculta a los 2.5 segundos
+        setTimeout(() => {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-20', 'opacity-0');
+        }, 2500);
+      }
+    }
 
     function eliminarDelCarrito(index) {
       carrito.splice(index, 1);
@@ -460,7 +459,6 @@ function mostrarToast(nombreProducto) {
 
       container.innerHTML = html;
 
-      // Habilitar checkbox de instalación solo si hay productos de Electrónica, Luces o Tintado
       const contInst = document.getElementById('contenedor-instalacion');
       if (tieneInstalables) {
         contInst.classList.remove('hidden');
@@ -480,7 +478,6 @@ function mostrarToast(nombreProducto) {
       
       let costoEnvio = TARIFAS_ENVIO[zona] || 0;
 
-      // REGLA: Si requiere instalación, el envío es GRATIS
       if (requiereInst) {
         costoEnvio = 0;
       }
@@ -491,7 +488,6 @@ function mostrarToast(nombreProducto) {
       document.getElementById('cart-shipping-cost').innerText = requiereInst ? '¡GRATIS! (Instalación)' : (zona ? 'RD$ ' + costoEnvio.toLocaleString() : 'Selecciona zona');
       document.getElementById('cart-total').innerText = 'RD$ ' + totalFinal.toLocaleString();
 
-      // Guardar datos ocultos para el correo de EmailJS
       document.getElementById('cart_summary_input').value = carrito.map(p => p.nombre).join(', ');
       document.getElementById('total_price_input').value = 'RD$ ' + totalFinal.toLocaleString();
     }
@@ -532,7 +528,7 @@ function mostrarToast(nombreProducto) {
       if (!fechaInput) return;
 
       const dateObj = new Date(fechaInput + 'T00:00:00');
-      const diaSemana = dateObj.getDay(); // 6 = Sábado
+      const diaSemana = dateObj.getDay();
 
       if (diaSemana !== 6) {
         alert("Las citas de instalación son únicamente los días Sábado.");
@@ -541,7 +537,6 @@ function mostrarToast(nombreProducto) {
         return;
       }
 
-      // Validación interna privada de citas máximas
       const horasReservadas = citasOcupadas[fechaInput] || [];
       if (horasReservadas.length >= 2) {
         alert("La agenda de este día está llena. Por favor elige el próximo sábado.");
@@ -563,7 +558,6 @@ function mostrarToast(nombreProducto) {
       });
       horaSelect.innerHTML = opciones;
 
-      // Verificación de diferencia de semanas para anticipo de 50%
       const hoy = new Date();
       const difDias = Math.ceil((dateObj - hoy) / (1000 * 60 * 60 * 24));
 
@@ -575,7 +569,6 @@ function mostrarToast(nombreProducto) {
       }
     }
 
-    // Envío por EmailJS con parámetros completos
     document.getElementById('booking-form').addEventListener('submit', function(event) {
       event.preventDefault();
 
