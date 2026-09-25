@@ -23,9 +23,8 @@ export default function Home() {
       setProductos(docs);
     } catch (error) {
       console.error("Error al cargar productos:", error);
-    } finally {
-      setLoading(false);
-    }
+    } font-sans;
+    setLoading(false);
   };
 
   const enviarWhatsApp = (producto) => {
@@ -38,89 +37,104 @@ export default function Home() {
     : productos.filter(p => p.categoria === categoriaSel);
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] text-white font-sans flex flex-col">
+    <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
       {/* Header / Navbar */}
-      <header className="bg-black/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <span className="text-xl font-black tracking-widest text-white">GR <span className="text-[#E50914]">AUTO ADORNOS</span></span>
+      <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          
+          {/* Logo del negocio */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img 
+              src="/LOGO NEGRO.jpeg" 
+              alt="GR Auto Adornos Logo" 
+              style={{ height: '45px', borderRadius: '6px', objectFit: 'contain' }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+            <span style={{ fontSize: '20px', fontWeight: '900', letterSpacing: '1px' }}>
+              GR <span style={{ color: '#E50914' }}>AUTO ADORNOS</span>
+            </span>
           </div>
 
-          <Link href="/admin/login" className="text-xs bg-gray-900 border border-gray-700 hover:border-[#E50914] text-gray-300 px-3 py-1.5 rounded-lg transition">
+          <Link href="/admin/login" style={{ backgroundColor: '#E50914', color: '#FFFFFF', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', textDecoration: 'none' }}>
             Área Admin 🔒
           </Link>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-b from-black to-[#0D0D0D] py-16 px-4 text-center border-b border-gray-800">
-        <div className="max-w-3xl mx-auto space-y-4">
-          <span className="text-[10px] bg-red-950 text-red-400 border border-[#E50914] px-3 py-1 rounded-full font-bold uppercase tracking-widest">
+      {/* Hero Banner */}
+      <section style={{ backgroundColor: '#141414', padding: '50px 20px', textAlign: 'center', borderBottom: '1px solid #222' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <span style={{ backgroundColor: '#3b0000', color: '#ff4d4d', border: '1px solid #E50914', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>
             Taller & Accesorios Automotrices
           </span>
-          <h1 className="text-3xl md:text-5xl font-black tracking-tight uppercase">
+          <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '15px 0 10px', textTransform: 'uppercase' }}>
             Dale el estilo y potencia a tu vehículo
           </h1>
-          <p className="text-gray-400 text-xs md:text-sm max-w-xl mx-auto">
+          <p style={{ color: '#AAAAAA', fontSize: '14px', maxWidth: '600px', margin: '0 auto' }}>
             Explora nuestro catálogo de accesorios, iluminación LED, sistemas de audio y servicios para tu auto.
           </p>
         </div>
       </section>
 
       {/* Catálogo de Productos */}
-      <main className="max-w-7xl mx-auto px-4 py-12 flex-grow w-full space-y-8">
+      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
         
         {/* Filtro de Categorías */}
-        <div className="flex flex-wrap justify-center gap-2 text-xs">
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '30px' }}>
           {['Todos', 'Accesorios', 'Iluminación', 'Audio', 'Limpieza', 'Taller'].map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoriaSel(cat)}
-              className={`px-4 py-2 rounded-xl font-bold transition ${
-                categoriaSel === cat 
-                  ? 'bg-[#E50914] text-white' 
-                  : 'bg-[#181818] text-gray-400 border border-gray-800 hover:text-white'
-              }`}
+              style={{
+                backgroundColor: categoriaSel === cat ? '#E50914' : '#1A1A1A',
+                color: '#FFFFFF',
+                border: categoriaSel === cat ? '1px solid #E50914' : '1px solid #333',
+                padding: '8px 18px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '12px'
+              }}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        {/* Grid de Productos */}
+        {/* Listado de Productos */}
         {loading ? (
-          <div className="text-center py-12 text-xs text-gray-500">Cargando catálogo...</div>
+          <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>Cargando catálogo...</div>
         ) : productosFiltrados.length === 0 ? (
-          <div className="bg-[#181818] border border-gray-800 rounded-2xl p-12 text-center text-xs text-gray-500">
-            No hay productos disponibles en esta categoría por el momento.
+          <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#888' }}>
+            No hay productos registrados aún.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
             {productosFiltrados.map((prod) => (
-              <div key={prod.id} className="bg-[#181818] border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition flex flex-col justify-between">
+              <div key={prod.id} style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <img 
                     src={prod.imagenUrl} 
                     alt={prod.nombre} 
-                    className="w-full h-48 object-cover bg-black"
+                    style={{ width: '100%', height: '180px', objectFit: 'cover', backgroundColor: '#000' }}
                     onError={(e) => { e.target.src = 'https://via.placeholder.com/300?text=GR+Auto+Adornos'; }}
                   />
-                  <div className="p-4 space-y-2">
-                    <span className="text-[10px] bg-gray-900 text-gray-400 px-2 py-0.5 rounded font-semibold uppercase border border-gray-800">
+                  <div style={{ padding: '15px' }}>
+                    <span style={{ fontSize: '10px', backgroundColor: '#222', color: '#DDD', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
                       {prod.categoria}
                     </span>
-                    <h3 className="text-sm font-bold text-white leading-snug">{prod.nombre}</h3>
-                    <p className="text-base font-black text-[#E50914]">RD$ {prod.precio}</p>
+                    <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>{prod.nombre}</h3>
+                    <p style={{ fontSize: '18px', fontWeight: '900', color: '#E50914', margin: '0' }}>RD$ {prod.precio}</p>
                   </div>
                 </div>
 
-                <div className="p-4 pt-0">
+                <div style={{ padding: '15px', paddingTop: '0' }}>
                   <button
                     onClick={() => enviarWhatsApp(prod)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center space-x-2"
+                    style={{ width: '100%', backgroundColor: '#25D366', color: '#FFF', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
                   >
-                    <span>Pedir por WhatsApp</span>
+                    Pedir por WhatsApp
                   </button>
                 </div>
               </div>
@@ -130,7 +144,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-black border-t border-gray-800 py-8 text-center text-xs text-gray-600">
+      <footer style={{ backgroundColor: '#000000', borderTop: '1px solid #222', padding: '20px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
         <p>© 2026 GR Auto Adornos. Todos los derechos reservados.</p>
       </footer>
     </div>
