@@ -47,7 +47,7 @@ export default function Dashboard() {
     }
   };
 
-  // Subir imagen desde la computadora y convertir a Base64/DataURL
+  // Subir imagen desde el dispositivo y convertir a DataURL
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -119,21 +119,26 @@ export default function Dashboard() {
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
-      {/* Navegación Admin */}
+      {/* Navegación Admin Completa */}
       <header style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '18px', fontWeight: '900' }}>GR <span style={{ color: '#E50914' }}>ADMIN PANEL</span></span>
           
-          <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <Link href="/admin/dashboard" style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none', fontWeight: 'bold' }}>🛒 Catálogo</Link>
             <Link href="/admin/pedidos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📦 Pedidos / Facturas</Link>
+            <Link href="/admin/inventario" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📊 Inventario / Alertas</Link>
+            <Link href="/admin/ganancias" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📈 Ganancias</Link>
+            <Link href="/admin/crm" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>👥 CRM / Fidelización</Link>
+            <Link href="/admin/citas" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📅 Citas</Link>
+            <Link href="/admin/suplidores" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>🏢 Suplidores</Link>
           </nav>
 
           <button onClick={() => { localStorage.removeItem('adminAuth'); router.push('/admin/login'); }} style={{ backgroundColor: '#222', color: '#ff4d4d', border: '1px solid #333', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>Salir 🚪</button>
         </div>
       </header>
 
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '25px 20px' }}>
+      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '25px 20px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>Gestión Directa del Catálogo Público</h1>
 
         {/* Formulario de producto */}
@@ -154,7 +159,7 @@ export default function Dashboard() {
               <option value="Tintados">Tintados</option>
             </select>
 
-            {/* Subida de Archivo (Foto) */}
+            {/* Subida de Foto */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <label style={{ fontSize: '11px', color: '#AAA' }}>Foto del Producto:</label>
               <input type="file" accept="image/*" onChange={handleImageUpload} style={{ backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '6px', borderRadius: '6px', fontSize: '11px' }} />
