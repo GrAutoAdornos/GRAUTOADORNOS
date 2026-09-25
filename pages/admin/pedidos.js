@@ -1,129 +1,106 @@
 // pages/admin/pedidos.js
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
 import { useRouter } from 'next/router';
+import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
-export default function AdminPedidos() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [pedidos, setPedidos] = useState([]);
+export default function PedidosAdmin() {
   const router = useRouter();
+  const [pedidos, setPedidos] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) {
-        router.push('/admin/login');
-      } else {
-        setUser(currentUser);
-        cargarPedidos();
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [router]);
+    if (!localStorage.getItem('adminAuth')) {
+      router.push('/admin/login');
+      return;
+    }
+    cargarPedidos();
+  }, []);
 
   const cargarPedidos = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'pedidos'));
-      const docs = [];
-      querySnapshot.forEach((doc) => {
-        docs.push({ id: doc.id, ...doc.data() });
-      });
-      setPedidos(docs);
-    } catch (error) {
-      console.error("Error al cargar pedidos:", error);
+      const snap = await getDocs(collection(db, 'pedidos'));
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setPedidos(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCambiarEstado = async (id, nuevoEstado) => {
+  const cambiarEstado = async (id, nuevoEstado) => {
     try {
       await updateDoc(doc(db, 'pedidos', id), { estado: nuevoEstado });
-      cargarPedidos();
-    } catch (error) {
-      console.error("Error al actualizar estado:", error);
+      setPedidos((prev) => prev.map((p) => p.id === id ? { ...p, estado: nuevoEstado } : p));
+    } catch (e) {
+      alert("Error actualizando estado.");
     }
   };
 
-  const enviarFacturaWhatsApp = (pedido) => {
-    const mensaje = `*FACTURA DE COMPRA - GR AUTO ADORNOS*%0A%0A` +
-      `*Cliente:* ${pedido.clienteNombre}%0A` +
-      `*Teléfono:* ${pedido.clienteTelefono}%0A` +
-      `*Producto/Servicio:* ${pedido.detalles}%0A` +
-      `*Total:* RD$ ${pedido.total}%0A` +
-      `*Estado:* ${pedido.estado}%0A%0A` +
-      `¡Gracias por preferir GR Auto Adornos!`;
-
-    const url = `https://wa.me/${pedido.clienteTelefono}?text=${mensaje}`;
-    window.open(url, '_blank');
+  const borrarPedido = async (id) => {
+    if (confirm("¿Seguro que deseas eliminar este pedido?")) {
+      await deleteDoc(doc(db, 'pedidos', id));
+      setPedidos((prev) => prev.filter((p) => p.id !== id));
+    }
   };
 
-  if (loading) {
-    return <div className="min-h-screen bg-[#0D0D0D] text-white flex items-center justify-center text-xs">Cargando Módulo...</div>;
-  }
-
   return (
-    <div className="min-h-screen bg-[#0D0D0D] text-white flex flex-col font-sans">
-      <header className="bg-black border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <span className="text-lg font-black tracking-wider">GR ADMIN</span>
-            <span className="text-[10px] bg-red-950 text-red-400 border border-[#E50914] px-2 py-0.5 rounded font-bold uppercase">
-              Pedidos y Facturas
-            </span>
-          </div>
-
-          <Link href="/admin/dashboard" className="text-xs bg-gray-900 border border-gray-700 text-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-800 transition">
-            ← Volver al Panel
-          </Link>
-        </div>
+    <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      
+      <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '18px', fontWeight: '900' }}>GR <span style={{ color: '#E50914' }}>PANEL ADMIN</span></span>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full space-y-6">
-        <h3 className="text-sm font-black uppercase text-white tracking-wider">
-          Gestión de Pedidos y Recibos ({pedidos.length})
-        </h3>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '30px 20px' }}>
+        
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+          <Link href="/admin/dashboard" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            📊 General
+          </Link>
+          <Link href="/admin/pedidos" style={{ backgroundColor: '#E50914', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            📦 Pedidos ({pedidos.length})
+          </Link>
+          <Link href="/admin/productos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            🏷️ Productos
+          </Link>
+        </div>
 
-        {pedidos.length === 0 ? (
-          <div className="bg-[#181818] border border-gray-800 rounded-2xl p-8 text-center text-xs text-gray-500">
-            No hay pedidos registrados en el sistema.
-          </div>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>Gestión de Pedidos</h1>
+
+        {loading ? (
+          <p style={{ color: '#888' }}>Cargando pedidos...</p>
+        ) : pedidos.length === 0 ? (
+          <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '30px', textAlign: 'center', color: '#888' }}>No hay pedidos aún.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pedidos.map((pedido) => (
-              <div key={pedido.id} className="bg-[#181818] border border-gray-800 p-5 rounded-xl space-y-3">
-                <div className="flex justify-between items-start border-b border-gray-800 pb-2">
-                  <div>
-                    <h4 className="text-xs font-bold text-white">{pedido.clienteNombre}</h4>
-                    <p className="text-[10px] text-gray-400">{pedido.clienteTelefono}</p>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                    pedido.estado === 'Completado' ? 'bg-green-950 text-green-400 border border-green-800' : 'bg-yellow-950 text-yellow-400 border border-yellow-800'
-                  }`}>
-                    {pedido.estado || 'Pendiente'}
-                  </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {pedidos.map((p) => (
+              <div key={p.id} style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold', color: '#E50914', fontSize: '16px' }}>#{p.orderId || p.id}</span>
+                  <select 
+                    value={p.estado || 'Pendiente'} 
+                    onChange={(e) => cambiarEstado(p.id, e.target.value)}
+                    style={{ backgroundColor: '#181818', color: '#FFF', border: '1px solid #333', padding: '6px 12px', borderRadius: '6px', fontSize: '12px' }}
+                  >
+                    <option value="Pendiente">🟡 Pendiente</option>
+                    <option value="Completado">🟢 Completado</option>
+                    <option value="Cancelado">🔴 Cancelado</option>
+                  </select>
                 </div>
 
-                <div className="text-xs text-gray-300 space-y-1">
-                  <p><span className="text-gray-500">Detalle:</span> {pedido.detalles}</p>
-                  <p className="text-[#E50914] font-black text-sm">RD$ {pedido.total}</p>
+                <div style={{ fontSize: '13px', color: '#DDD', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <p style={{ margin: 0 }}><strong>Cliente:</strong> {p.clienteNombre}</p>
+                  <p style={{ margin: 0 }}><strong>Teléfono:</strong> {p.clienteTelefono}</p>
+                  <p style={{ margin: 0 }}><strong>Total:</strong> <span style={{ color: '#25D366', fontWeight: 'bold' }}>RD$ {p.total}</span></p>
+                  <p style={{ margin: 0 }}><strong>Detalles:</strong> {p.detalles}</p>
+                  {p.fechaCita && <p style={{ margin: 0, color: '#ff4d4d' }}><strong>Cita:</strong> {p.fechaCita} - {p.horaCita}</p>}
                 </div>
 
-                <div className="flex space-x-2 pt-2">
-                  <button
-                    onClick={() => handleCambiarEstado(pedido.id, 'Completado')}
-                    className="flex-1 bg-green-900 hover:bg-green-800 text-green-200 text-[10px] font-bold py-2 rounded-lg transition"
-                  >
-                    ✓ Marcar Listo
-                  </button>
-                  <button
-                    onClick={() => enviarFacturaWhatsApp(pedido)}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-2 rounded-lg transition flex items-center justify-center space-x-1"
-                  >
-                    <span>📲 Facturar WA</span>
-                  </button>
+                <div style={{ textAlign: 'right', marginTop: '5px' }}>
+                  <button onClick={() => borrarPedido(p.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', fontSize: '12px' }}>🗑 Eliminar</button>
                 </div>
               </div>
             ))}
