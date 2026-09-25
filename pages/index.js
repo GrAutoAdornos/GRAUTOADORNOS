@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import emailjs from '@emailjs-browser';
 
 export default function Home() {
   const [productos, setProductos] = useState([]);
@@ -187,25 +186,29 @@ export default function Home() {
       // 1. Guardar pedido en Firestore
       await addDoc(collection(db, 'pedidos'), pedidoData);
 
-      // 2. Enviar correo automatizado con EmailJS
-      const templateParams = {
-        user_name: cliente.nombre,
-        order_id: orderId,
-        cart_summary: cartSummary,
-        total_price: `RD$ ${totalCart}`,
-        metodo_pago: cliente.metodoPago,
-        direccion: cliente.direccion,
-        bloque_cita: bloqueCitaHTML,
-        bloque_bancos: bloqueBancosHTML,
-        to_email: cliente.email
+      // 2. Enviar correo usando EmailJS vía API REST
+      const emailPayload = {
+        service_id: 'service_jfx0g2e',
+        template_id: 'template_mhdgbsw',
+        user_id: 'gFYWXFr3j_woisLA-',
+        template_params: {
+          user_name: cliente.nombre,
+          order_id: orderId,
+          cart_summary: cartSummary,
+          total_price: `RD$ ${totalCart}`,
+          metodo_pago: cliente.metodoPago,
+          direccion: cliente.direccion,
+          bloque_cita: bloqueCitaHTML,
+          bloque_bancos: bloqueBancosHTML,
+          to_email: cliente.email
+        }
       };
 
-      await emailjs.send(
-        'service_jfx0g2e',
-        'template_mhdgbsw',
-        templateParams,
-        'gFYWXFr3j_woisLA-'
-      );
+      await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPayload)
+      });
 
       // 3. Redirigir a WhatsApp
       const mensajeWA = `Hola GR Auto Adornos, realicé el Pedido #${orderId}%0A%0A*Cliente:* ${cliente.nombre}%0A*Total:* RD$ ${totalCart}%0A*Dirección:* ${cliente.direccion}${cliente.requiereInstalacion ? `%0A*Cita Instalación:* ${cliente.fechaCita} a las${cliente.horaCita}` : ''}`;
@@ -237,7 +240,7 @@ export default function Home() {
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
       {/* Header / Navbar sin enlace admin público */}
-      <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px', sticky: 'top', zIndex: 40 }}>
+      <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -359,7 +362,7 @@ export default function Home() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 50, display: 'flex', justifyContent: 'flex-end' }}>
           <div style={{ backgroundColor: '#141414', width: '100%', maxWidth: '400px', height: '100%', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', pb: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF' }}>Tu Carrito de Compras</h2>
                 <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
               </div>
@@ -524,13 +527,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Botones Flotantes de Contacto (WhatsApp, Instagram, Email) */}
+      {/* Botones Flotantes de Contacto (WhatsApp, Instagram) */}
       <div style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 40 }}>
         <a
           href="https://wa.me/18494040514"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ backgroundColor: '#25D366', color: '#FFF', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyCenter: 'center', textDecoration: 'none', fontSize: '24px', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', justifyContent: 'center' }}
+          style={{ backgroundColor: '#25D366', color: '#FFF', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', fontSize: '24px', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}
           title="Contactar por WhatsApp"
         >
           📲
