@@ -1,120 +1,102 @@
 // pages/admin/dashboard.js
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
 import { useRouter } from 'next/router';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
-export default function AdminDashboard() {
-  const [user, setUser] = useState(null);
+export default function Dashboard() {
+  const router = Router();
+  const [pedidos, setPedidos] = useState([]);
+  const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ productos: 0, stockBajo: 0, pedidos: 0 });
-  const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        router.push('/admin/login');
-      } else {
-        setUser(currentUser);
-        await obtenerEstadisticas();
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [router]);
+    const isAuth = localStorage.getItem('adminAuth');
+    if (!isAuth) {
+      router.push('/admin/login');
+      return;
+    }
+    cargarDatos();
+  }, []);
 
-  const obtenerEstadisticas = async () => {
+  const cargarDatos = async () => {
     try {
-      const prodSnap = await getDocs(collection(db, 'productos'));
-      let totalProd = 0;
-      let bajo = 0;
+      const snapPedidos = await getDocs(collection(db, 'pedidos'));
+      const snapProds = await getDocs(collection(db, 'productos'));
+      
+      const listPedidos = [];
+      snapPedidos.forEach((doc) => listPedidos.push({ id: doc.id, ...doc.data() }));
+      
+      const listProds = [];
+      snapProds.forEach((doc) => listProds.push({ id: doc.id, ...doc.data() }));
 
-      prodSnap.forEach((doc) => {
-        totalProd++;
-        if (doc.data().stock <= 3) bajo++;
-      });
-
-      const pedSnap = await getDocs(collection(db, 'pedidos'));
-
-      setStats({
-        productos: totalProd,
-        stockBajo: bajo,
-        pedidos: pedSnap.size
-      });
-    } catch (error) {
-      console.error("Error al obtener estadísticas:", error);
+      setPedidos(listPedidos);
+      setProductos(listProds);
+    } catch (e) {
+      console.error("Error al cargar dashboard:", e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen bg-[#0D0D0D] text-white flex items-center justify-center text-xs">Cargando Panel...</div>;
-  }
+  const totalVentas = pedidos.reduce((acc, p) => acc + (Number(p.total) || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] text-white flex flex-col font-sans">
-      {/* Topbar */}
-      <header className="bg-black border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <span className="text-lg font-black tracking-wider">GR ADMIN</span>
-            <span className="text-[10px] bg-red-950 text-red-400 border border-[#E50914] px-2 py-0.5 rounded font-bold uppercase">
-              Dashboard
-            </span>
-          </div>
-
-          <button
-            onClick={() => signOut(auth)}
-            className="text-xs bg-red-950 border border-[#E50914] text-red-300 px-3 py-1.5 rounded-lg hover:bg-red-900 transition font-bold"
-          >
-            Cerrar Sesión
-          </button>
+    <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      
+      {/* Header Admin */}
+      <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '18px', fontWeight: '900' }}>GR <span style={{ color: '#E50914' }}>PANEL ADMIN</span></span>
         </div>
+        <button 
+          onClick={() => { localStorage.removeItem('adminAuth'); router.push('/admin/login'); }}
+          style={{ backgroundColor: '#1F1F1F', color: '#ff4d4d', border: '1px solid #333', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
+        >
+          Cerrar Sesión 🚪
+        </button>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full space-y-8">
-        <div>
-          <h2 className="text-xl font-black">Bienvenido, {user?.email}</h2>
-          <p className="text-xs text-gray-400 mt-1">Gestión general de inventario, ventas y citas de taller.</p>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '30px 20px' }}>
+        
+        {/* Menú de Navegación Admin */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+          <Link href="/admin/dashboard" style={{ backgroundColor: '#E50914', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            📊 General
+          </Link>
+          <Link href="/admin/pedidos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            📦 Pedidos ({pedidos.length})
+          </Link>
+          <Link href="/admin/productos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '10px 18px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>
+            🏷️ Productos ({productos.length})
+          </Link>
         </div>
 
-        {/* Tarjetas de Métricas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#181818] border border-gray-800 p-5 rounded-xl">
-            <span className="text-xs text-gray-400 uppercase font-semibold">Total Productos</span>
-            <p className="text-2xl font-black text-white mt-1">{stats.productos}</p>
-          </div>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>Resumen General</h1>
 
-          <div className="bg-[#181818] border border-gray-800 p-5 rounded-xl">
-            <span className="text-xs text-gray-400 uppercase font-semibold">Stock Crítico (≤3)</span>
-            <p className={`text-2xl font-black mt-1 ${stats.stockBajo > 0 ? 'text-[#E50914]' : 'text-green-400'}`}>
-              {stats.stockBajo}
-            </p>
-          </div>
+        {loading ? (
+          <p style={{ color: '#888' }}>Cargando estadísticas...</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+            
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '20px' }}>
+              <p style={{ fontSize: '12px', color: '#AAA', margin: '0 0 5px' }}>Total en Ventas</p>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#25D366', margin: 0 }}>RD$ {totalVentas}</h2>
+            </div>
 
-          <div className="bg-[#181818] border border-gray-800 p-5 rounded-xl">
-            <span className="text-xs text-gray-400 uppercase font-semibold">Pedidos Registrados</span>
-            <p className="text-2xl font-black text-white mt-1">{stats.pedidos}</p>
-          </div>
-        </div>
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '20px' }}>
+              <p style={{ fontSize: '12px', color: '#AAA', margin: '0 0 5px' }}>Pedidos Registrados</p>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#E50914', margin: 0 }}>{pedidos.length}</h2>
+            </div>
 
-        {/* Accesos Rápidos a Módulos */}
-        <div>
-          <h3 className="text-xs font-black uppercase text-gray-400 mb-4 tracking-wider">Módulos del Sistema</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Link href="/admin/productos" className="bg-[#181818] border border-gray-800 hover:border-[#E50914] p-5 rounded-2xl transition group">
-              <h4 className="text-sm font-bold text-white group-hover:text-[#E50914] transition">📦 Inventario de Productos</h4>
-              <p className="text-xs text-gray-400 mt-1">Agregar, editar precio, categorizar y ajustar stock.</p>
-            </Link>
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '20px' }}>
+              <p style={{ fontSize: '12px', color: '#AAA', margin: '0 0 5px' }}>Productos en Catálogo</p>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#FFF', margin: 0 }}>{productos.length}</h2>
+            </div>
 
-            <Link href="/admin/pedidos" className="bg-[#181818] border border-gray-800 hover:border-[#E50914] p-5 rounded-2xl transition group">
-              <h4 className="text-sm font-bold text-white group-hover:text-[#E50914] transition">🧾 Pedidos y Facturación</h4>
-              <p className="text-xs text-gray-400 mt-1">Revisar ventas y enviar comprobantes por WhatsApp.</p>
-            </Link>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
