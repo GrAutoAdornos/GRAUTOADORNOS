@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GR Auto Adornos | Customization & Detailing</title>
+  
+  <!-- EmailJS SDK -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script type="text/javascript">
+    (function() {
+      emailjs.init("gFYWXFr3j_woisLA-");
+    })();
+  </script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brandRed: '#E50914',
+            brandDark: '#0D0D0D',
+            brandCard: '#181818',
+            brandGray: '#1a1a1a'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-brandDark text-white font-sans flex flex-col min-h-screen">
+
+  <!-- Notificación Flotante "Agregado al carrito" -->
+  <div id="toast-notification" class="fixed bottom-5 right-5 bg-black border-2 border-brandRed text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
+    <i class="fas fa-check-circle text-green-500 text-xl"></i>
+    <div>
+      <p class="font-black text-sm uppercase tracking-wider">¡Agregado al carrito!</p>
+      <p id="toast-product-name" class="text-xs text-gray-400"></p>
+    </div>
+  </div>
+
+  <!-- Header / Nav -->
+  <header class="bg-black border-b border-brandRed sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      
+      <!-- Logo y Nombre -->
+      <a href="#" class="flex items-center space-x-3">
+        <img src="LOGO NEGRO.jpeg" alt="GR Auto Adornos Logo" class="h-12 w-auto object-contain rounded">
+        <div>
+          <span class="text-lg sm:text-xl font-black text-white tracking-wider block leading-none">GR AUTO ADORNOS</span>
+          <span class="text-[9px] sm:text-[10px] text-brandRed font-bold tracking-widest uppercase">Customization & Detailing</span>
+        </div>
+      </a>
+
+      <!-- Navegación Desktop -->
+      <nav class="hidden md:flex items-center space-x-4">
+        <a href="https://wa.me/18494040514" target="_blank" class="text-green-500 hover:text-green-400 text-2xl transition" title="WhatsApp">
+          <i class="fab fa-whatsapp"></i>
+        </a>
+        <a href="https://www.instagram.com/gr.autoadorno/" target="_blank" class="text-pink-500 hover:text-pink-400 text-2xl transition" title="Instagram">
+          <i class="fab fa-instagram"></i>
+        </a>
+        <button onclick="abrirCarrito()" class="relative bg-brandRed hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition shadow-lg">
+          <i class="fas fa-shopping-cart mr-2"></i> Carrito
+          <span id="cart-count" class="ml-2 bg-white text-black text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+        </button>
+      </nav>
+
+      <!-- Botón Menú Hamburguesa Móvil -->
+      <div class="flex items-center space-x-3 md:hidden">
+        <button onclick="abrirCarrito()" class="relative bg-brandRed text-white p-2 rounded-lg flex items-center">
+          <i class="fas fa-shopping-cart"></i>
+          <span id="cart-count-mobile" class="ml-1 bg-white text-black text-xs font-bold px-1.5 py-0.2 rounded-full">0</span>
+        </button>
+
+        <button id="btn-mobile-menu" onclick="toggleMobileMenu()" class="text-white text-2xl focus:outline-none p-1">
+          <i id="icon-mobile-menu" class="fas fa-bars"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Menú Desplegable Móvil -->
+    <div id="mobile-menu" class="hidden md:hidden bg-brandCard border-t border-gray-800 px-4 py-4 space-y-4">
+      <a href="#catalogo" onclick="toggleMobileMenu()" class="block text-sm font-bold text-gray-200 hover:text-brandRed transition">
+        <i class="fas fa-store mr-2 text-brandRed"></i> Catálogo de Productos
+      </a>
+      <div class="border-t border-gray-800 pt-3 flex items-center justify-around">
+        <a href="https://wa.me/18494040514" target="_blank" class="flex items-center space-x-2 text-green-500 font-bold text-sm">
+          <i class="fab fa-whatsapp text-xl"></i>
+          <span>WhatsApp</span>
+        </a>
+        <a href="https://www.instagram.com/gr.autoadorno/" target="_blank" class="flex items-center space-x-2 text-pink-500 font-bold text-sm">
+          <i class="fab fa-instagram text-xl"></i>
+          <span>Instagram</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="bg-gradient-to-r from-black via-brandCard to-black py-12 text-center border-b border-gray-800">
+    <div class="max-w-4xl mx-auto px-4">
+      <h2 class="text-3xl md:text-5xl font-black mb-3 tracking-wide">EQUIPA Y PERSONALIZA TU VEHÍCULO</h2>
+      <p class="text-gray-400 text-base mb-6">Pantallas, Cámaras, Iluminación LED, Audio, Tintados e Instalación Profesional.</p>
+      <p class="text-xs text-gray-500 mb-6">📍 C/Felix Mariano Lluveres #10 Gazcue, Distrito Nacional, RD</p>
+      <a href="#catalogo" class="bg-brandRed hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition uppercase tracking-wider text-sm inline-block">Ver Catálogo</a>
+    </div>
+  </section>
+
+  <!-- Catálogo de Productos -->
+  <main id="catalogo" class="max-w-7xl mx-auto px-4 py-12 flex-grow">
+    <h2 class="text-2xl font-black text-center mb-10 border-b-2 border-brandRed inline-block pb-2 tracking-wider">NUESTROS PRODUCTOS</h2>
+
+    <!-- SECCIÓN DE BÚSQUEDA Y FILTRO DESPLEGABLE -->
+    <div class="max-w-7xl mx-auto px-4 my-8">
+      <div class="flex flex-col sm:flex-row gap-3 items-center bg-gray-900 p-4 rounded-xl border border-gray-800">
+        
+        <!-- BOTÓN DE MENÚ CATEGORÍAS (Dropdown) -->
+        <div class="relative w-full sm:w-auto">
+          <button onclick="toggleDemoDropdown()" class="w-full sm:w-auto bg-brandGray text-white border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between sm:justify-start gap-2 hover:border-brandRed active:scale-95 transition-all duration-150">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-brandRed" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+              <span id="label-categoria" class="font-bold">Categorías</span>
+            </div>
+            <svg class="w-3 h-3 text-gray-400 ml-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+
+          <!-- LISTA DESPLEGABLE (Dropdown Menu) -->
+          <div id="demo-dropdown" class="hidden absolute left-0 top-full mt-2 w-56 bg-brandCard border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-gray-800/50">
+            <div class="px-3 py-2 text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Filtrar por:</div>
+            <button onclick="selectCategory('todas', 'Todas las categorías')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Todas las categorías</span>
+              <span class="text-[10px] text-gray-500 group-hover:text-white">Ver todo</span>
+            </button>
+            <button onclick="selectCategory('electronica', 'Electrónica')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Electrónica</span>
+              <span class="text-[10px] opacity-60">📻</span>
+            </button>
+            <button onclick="selectCategory('iluminacion', 'Iluminación')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Iluminación</span>
+              <span class="text-[10px] opacity-60">💡</span>
+            </button>
+            <button onclick="selectCategory('accesorios', 'Accesorios')" class="btn-categoria-item w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-brandRed hover:text-white transition flex items-center justify-between group">
+              <span>Accesorios</span>
+              <span class="text-[10px] opacity-60">🚗</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Buscador en tiempo real -->
+        <div class="relative w-full flex-1">
+          <input 
+            type="text" 
+            id="input-buscador" 
+            onkeyup="filtrarProductos()" 
+            placeholder="Buscar producto (ej: Pantalla, LED...)" 
+            class="w-full bg-black border border-gray-700 text-white px-4 py-2.5 pl-10 rounded-xl focus:outline-none focus:border-brandRed transition text-xs"
+          >
+          <i class="fas fa-search absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+        </div>
+          
+      </div>
+    </div>
+    
+    <!-- CONTENEDOR PRINCIPAL DEL CATÁLOGO -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+      <!-- PRODUCTO 1: Pantalla Android -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="electronica">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="pantalla.jpg" alt="Pantalla Android" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-tv text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ELECTRONICA (INSTALABLE)</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Pantalla Android HD Universal</h3>
+          <p class="text-gray-400 text-xs mb-4">Pantalla táctil HD, GPS, Bluetooth, Apple CarPlay y Android Auto.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 12,500</p>
+          <button onclick="agregarAlCarrito('Pantalla Android HD Universal', 12500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+      <!-- PRODUCTO 2: Kit Luces LED -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="iluminacion">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="luces.jpg" alt="Kit Luces LED" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-bolt text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-red-950 text-red-400 border border-red-800 font-bold px-2 py-1 rounded">ILUMINACIÓN (INSTALABLE)</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit Luces LED Alta Potencia</h3>
+          <p class="text-gray-400 text-xs mb-4">Luz blanca ultra brillante, mayor visibilidad nocturna e instalación limpia.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 3,500</p>
+          <button onclick="agregarAlCarrito('Kit Luces LED Alta Potencia', 3500, true)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+      <!-- PRODUCTO 3: Limpia Cristales -->
+      <div class="tarjeta-producto bg-brandCard rounded-xl p-5 border border-gray-800 hover:border-brandRed transition flex flex-col justify-between shadow-xl" data-categoria="accesorios">
+        <div>
+          <div class="h-44 bg-gray-900 rounded-lg mb-4 flex items-center justify-center text-gray-500 border border-gray-800 overflow-hidden">
+            <img src="limpia-cristales.jpg" alt="Limpia Cristales" class="w-full h-full object-cover" onError="this.style.display='none'">
+            <i class="fas fa-spray-can text-4xl text-brandRed"></i>
+          </div>
+          <span class="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 font-bold px-2 py-1 rounded">ACCESORIOS</span>
+          <h3 class="nombre-producto text-lg font-bold mt-2 mb-1">Kit de Limpieza y Limpia Cristales</h3>
+          <p class="text-gray-400 text-xs mb-4">Microfibra y detallado rápido de alta calidad para vidrios y carrocería.</p>
+        </div>
+        <div>
+          <p class="text-2xl font-extrabold text-brandRed mb-3">RD$ 800</p>
+          <button onclick="agregarAlCarrito('Kit de Limpieza y Limpia Cristales', 800, false)" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-2 rounded-lg transition text-sm">
+            + Añadir al Carrito
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL DEL CARRITO DE COMPRA / CHECKOUT -->
+  <div id="modal-carrito" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-brandCard border border-brandRed rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl">
+      <button onclick="cerrarCarrito()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
+      
+      <h2 class="text-xl font-black mb-4 text-brandRed uppercase tracking-wider flex items-center">
+        <i class="fas fa-shopping-basket mr-2"></i> Tu Carrito de Compras
+      </h2>
+      
+      <!-- Lista de Productos en Carrito -->
+      <div id="cart-items" class="space-y-3 mb-4">
+        <p class="text-gray-400 text-sm">El carrito está vacío.</p>
+      </div>
+
+      <!-- Resumen Económico -->
+      <div class="border-t border-gray-800 pt-3 mb-6 space-y-1 text-sm">
+        <div class="flex justify-between text-gray-300">
+          <span>Subtotal Productos:</span>
+          <span id="cart-subtotal" class="font-bold">RD$ 0</span>
+        </div>
+        <div class="flex justify-between text-gray-300">
+          <span>Costo de Envío:</span>
+          <span id="cart-shipping-cost" class="font-bold text-yellow-400">Selecciona zona</span>
+        </div>
+        <div id="row-instalacion" class="flex justify-between text-yellow-400 hidden">
+          <span>Servicio de Instalación:</span>
+          <span>+RD$ 1,000</span>
+        </div>
+        <div class="flex justify-between text-lg font-black text-white pt-2 border-t border-gray-800">
+          <span>Total Final:</span>
+          <span id="cart-total" class="text-brandRed">RD$ 0</span>
+        </div>
+      </div>
+
+      <!-- Formulario Unificado -->
+      <form id="booking-form" class="space-y-4 bg-black p-4 rounded-lg border border-gray-800">
+        <input type="hidden" id="cart_summary_input" name="cart_summary">
+        <input type="hidden" id="total_price_input" name="total_price">
+
+        <h3 class="text-sm font-bold text-white border-b border-gray-800 pb-1">1. Datos del Cliente y Envío</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Nombre Completo</label>
+            <input type="text" id="user_name" name="user_name" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed">
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Correo Electrónico</label>
+            <input type="email" id="user_email" name="user_email" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Calle</label>
+            <input type="text" id="direccion_calle" name="direccion_calle" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed" placeholder="Ej: Av. Winston Churchill">
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Apt / Local / No.</label>
+            <input type="text" id="direccion_apt" name="direccion_apt" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed" placeholder="Ej: Apt 3B, No. 12">
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1 text-gray-300">Sector</label>
+            <input type="text" id="direccion_sector" name="direccion_sector" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed" placeholder="Ej: Piantini">
+          </div>
+        </div>
+
+        <!-- Ciudad / Zona para Envío -->
+        <div>
+          <label class="block text-xs font-medium mb-1 text-gray-300">Ciudad / Zona de Envío</label>
+          <select id="ciudad_envio" name="ciudad_envio" onchange="calcularTotales()" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed">
+            <option value="">-- Selecciona tu ubicación --</option>
+            <option value="DN">Distrito Nacional (RD$ 250)</option>
+            <option value="SDO">Santo Domingo Oeste (RD$ 250)</option>
+            <option value="SDN">Santo Domingo Norte (RD$ 300)</option>
+            <option value="SDE">Santo Domingo Este (RD$ 300)</option>
+            <option value="FORANEO">Fuera de Santo Domingo (Caribe Pack / Otros) (RD$ 300)</option>
+          </select>
+        </div>
+
+        <!-- Opción de Instalación (Condicional si hay productos instalables) -->
+        <div id="contenedor-instalacion" class="hidden bg-gray-900 p-3 rounded border border-gray-800">
+          <div class="flex items-center space-x-3">
+            <input type="checkbox" id="requiere_instalacion" name="requiere_instalacion" onchange="toggleInstalacion()" class="w-4 h-4 accent-brandRed">
+            <label for="requiere_instalacion" class="text-xs text-white font-medium cursor-pointer">
+              ¿Deseas servicio de instalación profesional? (+RD$ 1,000) <strong class="text-green-400">¡ENVÍO GRATIS!</strong>
+            </label>
+          </div>
+        </div>
+
+        <!-- Agendar Cita (Condicional) -->
+        <div id="seccion-cita" class="hidden space-y-3 pt-3 border-t border-gray-800">
+          <h3 class="text-xs font-bold text-brandRed uppercase">Cita de Instalación (Sábados de 1:00 PM a 7:00 PM)</h3>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-300">Seleccionar Día (Solo Sábados)</label>
+              <input type="date" id="fecha_cita" name="fecha_cita" onchange="validarFechaYHorarios()" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed">
+            </div>
+            
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-300">Hora Disponible</label>
+              <select id="hora_cita" name="hora_cita" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed">
+                <option value="">Selecciona un sábado primero</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerta Dinámica de Anticipo -->
+        <div id="alerta-pago" class="bg-red-950 border border-brandRed text-red-200 p-3 rounded text-xs hidden">
+          ⚠️ **Aviso de Reserva:** Para citas agendadas con 2 semanas o más de anticipación, se requiere la transferencia previa del **50% del total** para separar tu turno.
+        </div>
+
+        <!-- Método de Pago -->
+        <div>
+          <label class="block text-xs font-medium mb-1 text-gray-300">Método de Pago</label>
+          <select id="metodo_pago" name="metodo_pago" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs focus:outline-none focus:border-brandRed" required>
+            <option value="Pago Contra Entrega / Efectivo">Pago Contra Entrega (Efectivo)</option>
+            <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+          </select>
+        </div>
+
+        <button type="submit" class="w-full bg-brandRed hover:bg-red-700 text-white font-bold py-3 rounded-lg transition text-sm uppercase tracking-wider mt-4">
+          Procesar Pedido
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer con Contactos -->
+  <footer class="bg-black py-8 border-t border-gray-900 text-gray-400 text-xs">
+    <div class="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 items-center text-center md:text-left">
+      <div>
+        <img src="LOGO NEGRO.jpeg" alt="GR Auto Adornos Logo" class="h-10 w-auto object-contain mx-auto md:mx-0 mb-2">
+        <p class="text-gray-500">C/Felix Mariano Lluveres #10 Gazcue, Distrito Nacional, RD</p>
+      </div>
+      <div class="flex justify-center space-x-6 text-2xl">
+        <a href="https://wa.me/18494040514" target="_blank" class="text-green-500 hover:text-green-400"><i class="fab fa-whatsapp"></i></a>
+        <a href="https://www.instagram.com/gr.autoadorno/" target="_blank" class="text-pink-500 hover:text-pink-400"><i class="fab fa-instagram"></i></a>
+      </div>
+      <div class="text-center md:text-right">
+        <p>&copy; 2026 GR Auto Adornos. Todos los derechos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Firebase SDK (Modulo v12) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDDJltPlA8kjDzWnYFNkQnRBxFylSH52Tg",
+      authDomain: "gr-auto-adornos.firebaseapp.com",
+      projectId: "gr-auto-adornos",
+      storageBucket: "gr-auto-adornos.firebasestorage.app",
+      messagingSenderId: "387692589652",
+      appId: "1:387692589652:web:25cdeb4fcb183e00f133c1",
+      measurementId: "G-XD4DMESRJ4"
+    };
+
+    // Inicializar Firebase y Firestore
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Hacer la función accesible globalmente para el formulario
+    window.guardarPedidoFirebase = async function(datosPedido) {
+      try {
+        const docRef = await addDoc(collection(db, "pedidos"), {
+          ...datosPedido,
+          fechaRegistro: serverTimestamp()
+        });
+        console.log("Pedido guardado exitosamente en Firestore con ID:", docRef.id);
+        return true;
+      } catch (e) {
+        console.error("Error al guardar en Firebase:", e);
+        return false;
+      }
+    };
+  </script>
+
+  <!-- Lógica de Negocio, Carrito y Procesamiento -->
+  <script>
+    let carrito = [];
+    let categoriaActual = 'todas';
+    const COSTO_INSTALACION = 1000;
+    const citasOcupadas = {};
+
+    const TARIFAS_ENVIO = {
+      'DN': 250,
+      'SDO': 250,
+      'SDN': 300,
+      'SDE': 300,
+      'FORANEO': 300
+    };
+
+    // --- MENÚ MÓVIL CABECERA ---
+    function toggleMobileMenu() {
+      const menu = document.getElementById('mobile-menu');
+      const icon = document.getElementById('icon-mobile-menu');
+      
+      menu.classList.toggle('hidden');
+      if (menu.classList.contains('hidden')) {
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+      } else {
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
+      }
+    }
+
+    // --- DROPDOWN DE CATEGORÍAS DEL CATÁLOGO ---
+    function toggleDemoDropdown() {
+      const menu = document.getElementById('demo-dropdown');
+      menu.classList.toggle('hidden');
+    }
+
+    function selectCategory(idCategoria, nombreEtiqueta) {
+      categoriaActual = idCategoria;
+      document.getElementById('label-categoria').innerText = idCategoria === 'todas' ? 'Categorías' : nombreEtiqueta;
+      toggleDemoDropdown();
+      filtrarProductos();
+    }
+
+    // Cerrar el menú desplegable al hacer clic fuera
+    document.addEventListener('click', function(event) {
+      const menu = document.getElementById('demo-dropdown');
+      const button = menu ? menu.previousElementSibling : null;
+      if (menu && !menu.classList.contains('hidden')) {
+        if (!menu.contains(event.target) && (!button || !button.contains(event.target))) {
+          menu.classList.add('hidden');
+        }
+      }
+    });
+
+    // --- FUNCIONES DE FILTRADO Y BÚSQUEDA ---
+    function filtrarProductos() {
+      const busquedaInput = document.getElementById('input-buscador');
+      const busqueda = busquedaInput ? busquedaInput.value.toLowerCase().trim() : '';
+      const productos = document.querySelectorAll('.tarjeta-producto');
+
+      productos.forEach(producto => {
+        const elementoNombre = producto.querySelector('.nombre-producto');
+        const nombre = elementoNombre ? elementoNombre.innerText.toLowerCase() : '';
+        const categoriaProducto = producto.getAttribute('data-categoria');
+
+        const coincideCategoria = (categoriaActual === 'todas' || categoriaProducto === categoriaActual);
+        const coincideBusqueda = nombre.includes(busqueda);
+
+        if (coincideCategoria && coincideBusqueda) {
+          producto.style.display = 'flex';
+        } else {
+          producto.style.display = 'none';
+        }
+      });
+    }
+
+    // --- FUNCIONES DEL CARRITO ---
+    function agregarAlCarrito(nombre, precio, esInstalable) {
+      carrito.push({ nombre, precio, esInstalable });
+      actualizarCarritoUI();
+      mostrarToast(nombre);
+    }
+
+    function mostrarToast(nombreProducto) {
+      const toast = document.getElementById('toast-notification');
+      const toastName = document.getElementById('toast-product-name');
+      
+      if (toast && toastName) {
+        toastName.innerText = nombreProducto;
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+        
+        setTimeout(() => {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-20', 'opacity-0');
+        }, 2500);
+      }
+    }
+
+    function eliminarDelCarrito(index) {
+      carrito.splice(index, 1);
+      actualizarCarritoUI();
+    }
+
+    function actualizarCarritoUI() {
+      document.getElementById('cart-count').innerText = carrito.length;
+      const mobileCount = document.getElementById('cart-count-mobile');
+      if (mobileCount) mobileCount.innerText = carrito.length;
+
+      const container = document.getElementById('cart-items');
+      
+      if (carrito.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm">El carrito está vacío.</p>';
+        document.getElementById('contenedor-instalacion').classList.add('hidden');
+        document.getElementById('requiere_instalacion').checked = false;
+        toggleInstalacion();
+        calcularTotales();
+        return;
+      }
+
+      let html = '';
+      let tieneInstalables = false;
+
+      carrito.forEach((prod, index) => {
+        if (prod.esInstalable) tieneInstalables = true;
+        html += `
+          <div class="flex justify-between items-center bg-gray-900 p-2.5 rounded border border-gray-800">
+            <span class="text-xs font-medium">${prod.nombre}</span>
+            <div class="flex items-center space-x-3">
+              <span class="text-brandRed font-bold text-xs">RD$ ${prod.precio.toLocaleString()}</span>
+              <button onclick="eliminarDelCarrito(${index})" class="text-gray-500 hover:text-red-500 font-bold text-sm">&times;</button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+
+      const contInst = document.getElementById('contenedor-instalacion');
+      if (tieneInstalables) {
+        contInst.classList.remove('hidden');
+      } else {
+        contInst.classList.add('hidden');
+        document.getElementById('requiere_instalacion').checked = false;
+        toggleInstalacion();
+      }
+
+      calcularTotales();
+    }
+
+    function calcularTotales() {
+      let subtotal = carrito.reduce((acc, p) => acc + p.precio, 0);
+      const requiereInst = document.getElementById('requiere_instalacion').checked;
+      const zona = document.getElementById('ciudad_envio').value;
+      
+      let costoEnvio = TARIFAS_ENVIO[zona] || 0;
+
+      if (requiereInst) {
+        costoEnvio = 0;
+      }
+
+      let totalFinal = subtotal + (requiereInst ? COSTO_INSTALACION : 0) + costoEnvio;
+
+      document.getElementById('cart-subtotal').innerText = 'RD$ ' + subtotal.toLocaleString();
+      document.getElementById('cart-shipping-cost').innerText = requiereInst ? '¡GRATIS! (Instalación)' : (zona ? 'RD$ ' + costoEnvio.toLocaleString() : 'Selecciona zona');
+      document.getElementById('cart-total').innerText = 'RD$ ' + totalFinal.toLocaleString();
+
+      document.getElementById('cart_summary_input').value = carrito.map(p => p.nombre).join(', ');
+      document.getElementById('total_price_input').value = 'RD$ ' + totalFinal.toLocaleString();
+    }
+
+    function abrirCarrito() {
+      document.getElementById('modal-carrito').classList.remove('hidden');
+    }
+
+    function cerrarCarrito() {
+      document.getElementById('modal-carrito').classList.add('hidden');
+    }
+
+    function toggleInstalacion() {
+      const requiere = document.getElementById('requiere_instalacion').checked;
+      const seccionCita = document.getElementById('seccion-cita');
+      const rowInst = document.getElementById('row-instalacion');
+      const inputFecha = document.getElementById('fecha_cita');
+
+      if (requiere) {
+        seccionCita.classList.remove('hidden');
+        rowInst.classList.remove('hidden');
+        inputFecha.required = true;
+      } else {
+        seccionCita.classList.add('hidden');
+        rowInst.classList.add('hidden');
+        document.getElementById('alerta-pago').classList.add('hidden');
+        inputFecha.required = false;
+      }
+
+      calcularTotales();
+    }
+
+    function validarFechaYHorarios() {
+      const fechaInput = document.getElementById('fecha_cita').value;
+      const horaSelect = document.getElementById('hora_cita');
+      const alertaPago = document.getElementById('alerta-pago');
+      
+      if (!fechaInput) return;
+
+      const dateObj = new Date(fechaInput + 'T00:00:00');
+      const diaSemana = dateObj.getDay();
+
+      if (diaSemana !== 6) {
+        alert("Las citas de instalación son únicamente los días Sábado.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Selecciona un sábado</option>';
+        return;
+      }
+
+      const horasReservadas = citasOcupadas[fechaInput] || [];
+      if (horasReservadas.length >= 2) {
+        alert("La agenda de este día está llena. Por favor elige el próximo sábado.");
+        document.getElementById('fecha_cita').value = '';
+        horaSelect.innerHTML = '<option value="">Agenda llena</option>';
+        return;
+      }
+
+      const turnosPosibles = [
+        { hora: '13:00', label: '1:00 PM' },
+        { hora: '16:00', label: '4:00 PM' }
+      ];
+
+      let opciones = '<option value="">Selecciona una hora</option>';
+      turnosPosibles.forEach(turno => {
+        if (!horasReservadas.includes(turno.hora)) {
+          opciones += `<option value="${turno.label}">${turno.label}</option>`;
+        }
+      });
+      horaSelect.innerHTML = opciones;
+
+      const hoy = new Date();
+      const difDias = Math.ceil((dateObj - hoy) / (1000 * 60 * 60 * 24));
+
+      if (difDias >= 14) {
+        alertaPago.classList.remove('hidden');
+        document.getElementById('metodo_pago').value = 'Transferencia Bancaria';
+      } else {
+        alertaPago.classList.add('hidden');
+      }
+    }
+
+    // ENVÍO DE PEDIDO: ALMACENAMIENTO EN FIREBASE Y NOTIFICACIÓN POR EMAILJS
+    document.getElementById('booking-form').addEventListener('submit', async function(event) {
+      event.preventDefault();
+
+      if (carrito.length === 0) {
+        alert("El carrito está vacío. Agrega al menos un producto.");
+        return;
+      }
+
+      const requiereInstalacion = document.getElementById('requiere_instalacion').checked;
+      const fecha = document.getElementById('fecha_cita').value;
+      const hora = document.getElementById('hora_cita').value;
+
+      if (requiereInstalacion && (!fecha || !hora)) {
+        alert("Por favor completa la fecha y la hora para agendar tu cita.");
+        return;
+      }
+
+      // Estructura completa de datos del cliente y pedido
+      const datosPedido = {
+        cliente: {
+          nombre: document.getElementById('user_name').value,
+          email: document.getElementById('user_email').value,
+          direccion: {
+            calle: document.getElementById('direccion_calle').value,
+            apartamento: document.getElementById('direccion_apt').value,
+            sector: document.getElementById('direccion_sector').value,
+            zona: document.getElementById('ciudad_envio').value
+          }
+        },
+        productos: carrito,
+        total: document.getElementById('total_price_input').value,
+        instalacion: {
+          requerida: requiereInstalacion,
+          fecha: fecha || "N/A",
+          hora: hora || "N/A"
+        },
+        metodoPago: document.getElementById('metodo_pago').value,
+        estado: "Pendiente"
+      };
+
+      // 1. Guardar en Firebase Firestore
+      if (window.guardarPedidoFirebase) {
+        await window.guardarPedidoFirebase(datosPedido);
+      }
+
+      // 2. Enviar la notificación por correo con EmailJS
+      const templateParams = {
+        user_name: datosPedido.cliente.nombre,
+        user_email: datosPedido.cliente.email,
+        direccion: `${datosPedido.cliente.direccion.calle}, ${datosPedido.cliente.direccion.apartamento}, ${datosPedido.cliente.direccion.sector}, Zona: ${datosPedido.cliente.direccion.zona}`,
+        cart_summary: document.getElementById('cart_summary_input').value,
+        total_price: datosPedido.total,
+        requiere_instalacion: requiereInstalacion ? "Sí" : "No",
+        fecha_cita: datosPedido.instalacion.fecha,
+        hora_cita: datosPedido.instalacion.hora,
+        metodo_pago: datosPedido.metodoPago
+      };
+
+      emailjs.send('service_jfx0g2e', 'template_mhdgbsw', templateParams)
+        .then(function() {
+            alert('¡Orden recibida y registrada exitosamente!');
+            
+            if (requiereInstalacion && fecha && hora) {
+              const horaCode = hora.includes('1:00') ? '13:00' : '16:00';
+              if (!citasOcupadas[fecha]) citasOcupadas[fecha] = [];
+              citasOcupadas[fecha].push(horaCode);
+            }
+
+            carrito = [];
+            actualizarCarritoUI();
+            document.getElementById('booking-form').reset();
+            cerrarCarrito();
+        }, function(error) {
+            alert('El pedido se registró en el sistema pero ocurrió un error al enviar el correo: ' + JSON.stringify(error));
+        });
+    });
+  </script>
+</body>
+</html>
