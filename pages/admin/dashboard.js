@@ -8,16 +8,19 @@ import Link from 'next/link';
 export default function Dashboard() {
   const router = useRouter();
   const [productos, setProductos] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editando, setEditando] = useState(null);
   const [subiendoImagen, setSubiendoImagen] = useState(false);
-  
+
   const [nuevo, setNuevo] = useState({
     nombre: '',
     precio: '',
     costo: '',
     stock: 10,
     categoria: 'Accesorios',
+    proveedor: '',
+    tiempoEntrega: '',
     imagenUrl: '',
     requiereInstalacion: false,
     costoInstalacion: 0
@@ -30,18 +33,28 @@ export default function Dashboard() {
         router.push('/admin/login');
         return;
       }
-      cargarProductos();
+      cargarDatos();
     }
   }, []);
 
-  const cargarProductos = async () => {
+  const cargarDatos = async () => {
     try {
-      const snap = await getDocs(collection(db, 'productos'));
-      const list = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      setProductos(list);
+      // 1. Cargar productos
+      const snapProd = await getDocs(collection(db, 'productos'));
+      const listProd = [];
+      snapProd.forEach((d) => listProd.push({ id: d.id, ...d.data() }));
+      setProductos(listProd);
+
+      // 2. Cargar proveedores registrados
+      const snapProv = await getDocs(collection(db, 'proveedores'));
+      const listProv = [];
+      snapProv.forEach((d) => listProv.push({ id: d.id, ...d.data() }));
+      setProveedores(listProv);
+      if (listProv.length > 0 && !nuevo.proveedor) {
+        setNuevo((prev) => ({ ...prev, proveedor: listProv[0].nombre }));
+      }
     } catch (e) {
-      console.error("Error al cargar productos:", e);
+      console.error("Error al cargar datos:", e);
     } finally {
       setLoading(false);
     }
@@ -75,7 +88,10 @@ export default function Dashboard() {
         ...nuevo,
         precio: Number(nuevo.precio),
         costo: Number(nuevo.costo || 0),
+        costoCompra: Number(nuevo.costo || 0),
         stock: Number(nuevo.stock),
+        proveedor: nuevo.proveedor || 'Sin Proveedor',
+        tiempoEntrega: nuevo.tiempoEntrega || 'Inmediato',
         costoInstalacion: nuevo.requiereInstalacion ? Number(nuevo.costoInstalacion || 0) : 0
       };
 
@@ -93,20 +109,28 @@ export default function Dashboard() {
         costo: '',
         stock: 10,
         categoria: 'Accesorios',
+        proveedor: proveedores.length > 0 ? proveedores[0].nombre : '',
+        tiempoEntrega: '',
         imagenUrl: '',
         requiereInstalacion: false,
         costoInstalacion: 0
       });
       setEditando(null);
-      cargarProductos();
+      cargarDatos();
     } catch (e) {
+      console.error("Error al guardar:", e);
       alert("Error al guardar en la base de datos");
     }
   };
 
   const prepararEdicion = (prod) => {
     setEditando(prod.id);
-    setNuevo(prod);
+    setNuevo({
+      ...prod,
+      costo: prod.costo || prod.costoCompra || '',
+      proveedor: prod.proveedor || (proveedores.length > 0 ? proveedores[0].nombre : ''),
+      tiempoEntrega: prod.tiempoEntrega || ''
+    });
   };
 
   const eliminarProducto = async (id) => {
@@ -124,15 +148,15 @@ export default function Dashboard() {
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '18px', fontWeight: '900' }}>GR <span style={{ color: '#E50914' }}>ADMIN PANEL</span></span>
           
-         <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-  <Link href="/admin/dashboard" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>🛒 Catálogo</Link>
-  <Link href="/admin/pedidos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📦 Pedidos / Facturas</Link>
-  <Link href="/admin/inventario" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📊 Inventario / Alertas</Link>
-  <Link href="/admin/metricas" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📈 Métricas / Ganancias</Link>
-  <Link href="/admin/clientes" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>👥 Clientes / CRM</Link>
-  <Link href="/admin/citas" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📅 Citas</Link>
-  <Link href="/admin/proveedores" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>🏢 Proveedores</Link>
-</nav>
+          <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <Link href="/admin/dashboard" style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none', fontWeight: 'bold' }}>🛒 Catálogo</Link>
+            <Link href="/admin/pedidos" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📦 Pedidos / Facturas</Link>
+            <Link href="/admin/inventario" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📊 Inventario / Alertas</Link>
+            <Link href="/admin/metricas" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📈 Métricas / Ganancias</Link>
+            <Link href="/admin/clientes" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>👥 Clientes / CRM</Link>
+            <Link href="/admin/citas" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>📅 Citas</Link>
+            <Link href="/admin/proveedores" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>🏢 Proveedores</Link>
+          </nav>
 
           <button onClick={() => { localStorage.removeItem('adminAuth'); router.push('/admin/login'); }} style={{ backgroundColor: '#222', color: '#ff4d4d', border: '1px solid #333', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>Salir 🚪</button>
         </div>
@@ -158,6 +182,17 @@ export default function Dashboard() {
               <option value="Pantallas & Cámaras">Pantallas & Cámaras</option>
               <option value="Tintados">Tintados</option>
             </select>
+
+            {/* SELECCIÓN DE PROVEEDOR */}
+            <select value={nuevo.proveedor} onChange={(e) => setNuevo({ ...nuevo, proveedor: e.target.value })} style={{ backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '12px' }}>
+              <option value="">-- Seleccionar Proveedor --</option>
+              {proveedores.map((prov) => (
+                <option key={prov.id} value={prov.nombre}>{prov.nombre}</option>
+              ))}
+            </select>
+
+            {/* TIEMPO DE ENTREGA DEL PROVEEDOR */}
+            <input type="text" placeholder="Tiempo Entrega (ej. 2 días)" value={nuevo.tiempoEntrega} onChange={(e) => setNuevo({ ...nuevo, tiempoEntrega: e.target.value })} style={{ backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '12px' }} />
 
             {/* Subida de Foto */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -197,7 +232,7 @@ export default function Dashboard() {
                 {editando ? 'Actualizar Producto' : 'Publicar en la Web'}
               </button>
               {editando && (
-                <button type="button" onClick={() => { setEditando(null); setNuevo({ nombre: '', precio: '', costo: '', stock: 10, categoria: 'Accesorios', imagenUrl: '', requiereInstalacion: false, costoInstalacion: 0 }); }} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                <button type="button" onClick={() => { setEditando(null); setNuevo({ nombre: '', precio: '', costo: '', stock: 10, categoria: 'Accesorios', proveedor: '', tiempoEntrega: '', imagenUrl: '', requiereInstalacion: false, costoInstalacion: 0 }); }} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
                   Cancelar
                 </button>
               )}
@@ -215,7 +250,11 @@ export default function Dashboard() {
                   <h4 style={{ fontSize: '14px', margin: '10px 0 4px', color: '#FFF' }}>{p.nombre}</h4>
                   <p style={{ fontSize: '11px', color: '#AAA', margin: '0 0 5px' }}>Categoría: <span style={{ color: '#E50914' }}>{p.categoria}</span></p>
                   <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#25D366', margin: 0 }}>Precio: RD$ {p.precio}</p>
+                  {(p.costo || p.costoCompra) && <p style={{ fontSize: '11px', color: '#888', margin: '3px 0 0' }}>Costo Compra: RD$ {p.costo || p.costoCompra}</p>}
                   
+                  <p style={{ fontSize: '11px', color: '#AAA', margin: '4px 0 0' }}>Proveedor: <span style={{ color: '#FFF' }}>{p.proveedor || 'Sin especificar'}</span></p>
+                  <p style={{ fontSize: '11px', color: '#AAA', margin: '2px 0 0' }}>Entrega: <span style={{ color: '#FFF' }}>{p.tiempoEntrega || 'No especificado'}</span></p>
+
                   {p.requiereInstalacion ? (
                     <p style={{ fontSize: '11px', color: '#FFB800', margin: '4px 0 0', fontWeight: 'bold' }}>
                       🔧 Instalación: +RD$ {p.costoInstalacion}
