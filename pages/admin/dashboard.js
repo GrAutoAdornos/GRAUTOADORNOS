@@ -6,7 +6,7 @@ import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
 export default function Dashboard() {
-  const router = Router();
+  const router = useRouter(); // Corregido a useRouter()
   const [pedidos, setPedidos] = useState([]);
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
