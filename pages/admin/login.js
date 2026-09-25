@@ -1,77 +1,50 @@
 // pages/admin/login.js
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
 import { useRouter } from 'next/router';
 
-export default function AdminLogin() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function Login() {
   const router = useRouter();
+  const [password, setPassword] = useState('');
 
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
+    if (password === 'grauto2026') {
+      localStorage.setItem('adminAuth', 'true');
       router.push('/admin/dashboard');
-    } catch (err) {
-      console.error(err);
-      setError('Credenciales incorrectas. Verifica tu correo y contraseña.');
-    } finally {
-      setLoading(false);
+    } else {
+      alert("Contraseña incorrecta");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] text-white flex items-center justify-center p-4">
-      <div className="bg-[#181818] border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-black tracking-wider uppercase text-white">PANEL DE CONTROL</h1>
-          <p className="text-xs text-gray-400 mt-1">GR Auto Adornos Administration</p>
-        </div>
+    <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
+      
+      <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '30px', width: '100%', maxWidth: '380px', textAlign: 'center' }}>
+        
+        <img 
+          src="/LOGO NEGRO.jpeg" 
+          alt="Logo" 
+          style={{ height: '50px', marginBottom: '15px', borderRadius: '6px' }}
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
 
-        {error && (
-          <div className="bg-red-950 border border-[#E50914] text-red-300 p-3 rounded-lg text-xs mb-4 text-center">
-            {error}
-          </div>
-        )}
+        <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 5px' }}>GR <span style={{ color: '#E50914' }}>AUTO ADORNOS</span></h1>
+        <p style={{ fontSize: '12px', color: '#AAA', marginBottom: '20px' }}>Acceso al Panel de Administración</p>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">Correo Electrónico</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@autoadornos.com"
-              className="w-full bg-black border border-gray-700 rounded-lg py-2.5 px-3 text-xs text-white focus:outline-none focus:border-[#E50914] transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">Contraseña</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full bg-black border border-gray-700 rounded-lg py-2.5 px-3 text-xs text-white focus:outline-none focus:border-[#E50914] transition"
-            />
-          </div>
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <input
+            type="password"
+            placeholder="Contraseña de acceso"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '12px', borderRadius: '8px', fontSize: '13px', outline: 'none', textAlign: 'center' }}
+          />
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-[#E50914] hover:bg-red-700 text-white font-bold py-3 rounded-lg transition uppercase tracking-wider text-xs shadow-lg"
+            style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}
           >
-            {loading ? 'Ingresando...' : 'Iniciar Sesión'}
+            Ingresar
           </button>
         </form>
       </div>
