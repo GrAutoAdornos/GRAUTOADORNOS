@@ -1,0 +1,80 @@
+// pages/admin/login.js
+import { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
+import { useRouter } from 'next/router';
+
+export default function AdminLogin() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push('/admin/dashboard');
+    } catch (err) {
+      console.error(err);
+      setError('Credenciales incorrectas. Verifica tu correo y contraseña.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0D0D0D] text-white flex items-center justify-center p-4">
+      <div className="bg-[#181818] border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-black tracking-wider uppercase text-white">PANEL DE CONTROL</h1>
+          <p className="text-xs text-gray-400 mt-1">GR Auto Adornos Administration</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-950 border border-[#E50914] text-red-300 p-3 rounded-lg text-xs mb-4 text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">Correo Electrónico</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@autoadornos.com"
+              className="w-full bg-black border border-gray-700 rounded-lg py-2.5 px-3 text-xs text-white focus:outline-none focus:border-[#E50914] transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">Contraseña</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-black border border-gray-700 rounded-lg py-2.5 px-3 text-xs text-white focus:outline-none focus:border-[#E50914] transition"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#E50914] hover:bg-red-700 text-white font-bold py-3 rounded-lg transition uppercase tracking-wider text-xs shadow-lg"
+          >
+            {loading ? 'Ingresando...' : 'Iniciar Sesión'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
