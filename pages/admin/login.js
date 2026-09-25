@@ -1,16 +1,14 @@
 // pages/admin/login.js
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { app } from '../../lib/firebase'; // Asegúrate de exportar 'app' desde tu archivo firebase.js
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../lib/firebase'; // Importamos directamente auth
 
 export default function Login() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' }); // Para mostrar alertas de éxito o error
-  
-  const auth = getAuth(app);
+  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   const handleLogin = async (e) => {
     e.preventDefault();
