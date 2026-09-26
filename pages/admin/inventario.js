@@ -8,7 +8,9 @@ import Link from 'next/link';
 export default function InventarioAdmin() {
   const router = useRouter();
   const [productos, setProductos] = useState([]);
+  const [ventasPorProducto, setVentasPorProducto] = useState({});
   const [categoria, setCategoria] = useState('Todas');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!localStorage.getItem('adminAuth')) router.push('/admin/login');
@@ -17,12 +19,37 @@ export default function InventarioAdmin() {
 
   const cargarDatos = async () => {
     try {
-      const snap = await getDocs(collection(db, 'productos'));
-      const list = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      setProductos(list);
+      // 1. Cargar Productos
+      const snapProds = await getDocs(collection(db, 'productos'));
+      const listProds = [];
+      snapProds.forEach((d) => listProds.push({ id: d.id, ...d.data() }));
+
+      // 2. Cargar Pedidos para calcular Unidades Vendidas Reales
+      const snapPedidos = await getDocs(collection(db, 'pedidos'));
+      const conteoVentas = {};
+
+      snapPedidos.forEach((doc) => {
+        const pedido = doc.data();
+        const detalles = pedido.detalles || '';
+
+        // Analiza el texto de detalles (Ej: "LOGO GR AUTO ADORNOS (x8)")
+        listProds.forEach((prod) => {
+          if (detalles.includes(prod.nombre)) {
+            const regex = new RegExp(`${prod.nombre.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
+            const match = detalles.match(regex);
+            const cantidad = match ? parseInt(match[1], 10) : 1;
+
+            conteoVentas[prod.id] = (conteoVentas[prod.id] || 0) + cantidad;
+          }
+        });
+      });
+
+      setVentasPorProducto(conteoVentas);
+      setProductos(listProds);
     } catch (error) {
       console.error("Error al cargar inventario:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,58 +77,61 @@ export default function InventarioAdmin() {
           </select>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
-          {prodsFiltrados.map((p) => {
-            const stockActual = Number(p.stock ?? 0);
-            const stockInicial = Number(p.stockInicial ?? stockActual);
-            const vendidos = Math.max(0, stockInicial - stockActual);
-            const pocoStock = stockActual > 0 && stockActual <= 2;
-            const agotado = stockActual <= 0;
+        {loading ? (
+          <p style={{ color: '#888' }}>Calculando ventas e inventario...</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
+            {prodsFiltrados.map((p) => {
+              const stockDisponible = Number(p.stock ?? 0);
+              const vendidosReales = ventasPorProducto[p.id] || 0;
+              const stockInicialCalculado = stockDisponible + vendidosReales;
+              
+              const pocoStock = stockDisponible > 0 && stockDisponible <= 2;
+              const agotado = stockDisponible <= 0;
 
-            return (
-              <div 
-                key={p.id} 
-                style={{ 
-                  backgroundColor: '#141414', 
-                  border: agotado ? '1px solid #ff4d4d' : pocoStock ? '1px solid #FFB800' : '1px solid #222', 
-                  borderRadius: '10px', 
-                  padding: '18px' 
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <h4 style={{ margin: 0, fontSize: '15px', color: '#FFF' }}>{p.nombre}</h4>
-                  
-                  {/* Estado Visual */}
-                  {agotado ? (
-                    <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🚫 AGOTADO</span>
-                  ) : pocoStock ? (
-                    <span style={{ fontSize: '11px', color: '#FFB800', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚠️ ¡Poco stock!</span>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#25D366', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟢 Stock Normal</span>
-                  )}
+              return (
+                <div 
+                  key={p.id} 
+                  style={{ 
+                    backgroundColor: '#141414', 
+                    border: agotado ? '1px solid #ff4d4d' : pocoStock ? '1px solid #FFB800' : '1px solid #222', 
+                    borderRadius: '10px', 
+                    padding: '18px' 
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '15px', color: '#FFF' }}>{p.nombre}</h4>
+                    
+                    {agotado ? (
+                      <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🚫 AGOTADO</span>
+                    ) : pocoStock ? (
+                      <span style={{ fontSize: '11px', color: '#FFB800', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚠️ ¡Poco stock!</span>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#25D366', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟢 Stock Normal</span>
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: '12px', color: '#888', margin: '0 0 12px 0' }}>Categoría: {p.categoria || 'Sin Categoría'}</p>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#AAA', borderTop: '1px solid #222', paddingTop: '10px' }}>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>INICIAL</span>
+                      <strong style={{ color: '#FFF' }}>{stockInicialCalculado} unds.</strong>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>VENDIDOS</span>
+                      <strong style={{ color: '#E50914' }}>{vendidosReales} unds.</strong>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>DISPONIBLE</span>
+                      <strong style={{ color: '#25D366' }}>{stockDisponible} unds.</strong>
+                    </div>
+                  </div>
                 </div>
-
-                <p style={{ fontSize: '12px', color: '#888', margin: '0 0 12px 0' }}>Categoría: {p.categoria || 'Sin Categoría'}</p>
-
-                {/* Desglose de Unidades */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#AAA', borderTop: '1px solid #222', paddingTop: '10px' }}>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>INICIAL</span>
-                    <strong style={{ color: '#FFF' }}>{stockInicial} unds.</strong>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>VENDIDOS</span>
-                    <strong style={{ color: '#E50914' }}>{vendidos} unds.</strong>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '10px', color: '#666' }}>DISPONIBLE</span>
-                    <strong style={{ color: '#25D366' }}>{stockActual} unds.</strong>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </main>
     </div>
   );
