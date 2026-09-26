@@ -65,30 +65,29 @@ export default function Home() {
     setTimeout(() => setToastMsg(''), 3000);
   };
 
- const addToCart = (prod) => {
-  const stockDisponible = Number(prod.stock ?? 0);
-  const itemEnCarrito = cart.find((item) => item.id === prod.id);
-  const cantidadEnCarrito = itemEnCarrito ? itemEnCarrito.cantidad : 0;
+  const addToCart = (prod) => {
+    const stockDisponible = Number(prod.stock ?? 0);
+    const itemEnCarrito = cart.find((item) => item.id === prod.id);
+    const cantidadEnCarrito = itemEnCarrito ? itemEnCarrito.cantidad : 0;
 
-  if (stockDisponible <= 0) {
-    return alert('Este producto se encuentra agotado.');
-  }
-
-  if (cantidadEnCarrito + 1 > stockDisponible) {
-    return alert(`Solo quedan ${stockDisponible} unidades disponibles en inventario. No puedes agregar más.`);
-  }
-
-  setCart((prevCart) => {
-    if (itemEnCarrito) {
-      return prevCart.map((item) =>
-        item.id === prod.id ? { ...item, cantidad: item.cantidad + 1 } : item
-      );
+    if (stockDisponible <= 0) {
+      return alert('Este producto se encuentra agotado.');
     }
-    return [...prevCart, { ...prod, cantidad: 1, incluirInstalacion: false }];
-  });
-};
-  
-    lanzarToast(`✅ "${prod.nombre}" agregado al carrito`);
+
+    if (cantidadEnCarrito + 1 > stockDisponible) {
+      return alert(`Solo quedan ${stockDisponible} unidades disponibles en inventario. No puedes agregar más.`);
+    }
+
+    setCart((prevCart) => {
+      if (itemEnCarrito) {
+        return prevCart.map((item) =>
+          item.id === prod.id ? { ...item, cantidad: item.cantidad + 1 } : item
+        );
+      }
+      return [...prevCart, { ...prod, cantidad: 1, incluirInstalacion: false }];
+    });
+
+    lanzarToast(`"${prod.nombre}" agregado al carrito`);
   };
 
   const toggleInstalacionCart = (id) => {
@@ -145,7 +144,7 @@ export default function Home() {
   // Filtro de productos por categoría y buscador
   const productosFiltrados = productos.filter((p) => {
     const coincideCat = categoriaSel === 'Todos' || p.categoria === categoriaSel;
-    const coincideBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase());
+    const coincideBusqueda = (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
     return coincideCat && coincideBusqueda;
   });
 
@@ -246,35 +245,34 @@ export default function Home() {
       // 1. Guardar pedido en Firestore
       await addDoc(collection(db, 'pedidos'), pedidoData);
 
-      // --- CÓDIGO NUEVO: Descontar stock en Firestore ---
-    const batch = writeBatch(db);
-    for (const item of cart) {
-      if (item.id) {
-        const itemRef = doc(db, 'productos', item.id);
-        const stockActual = Number(item.stock) || 0;
-        const nuevoStock = Math.max(0, stockActual - item.cantidad);
-        batch.update(itemRef, { stock: nuevoStock });
+      // Descontar stock en Firestore
+      const batch = writeBatch(db);
+      for (const item of cart) {
+        if (item.id) {
+          const itemRef = doc(db, 'productos', item.id);
+          const stockActual = Number(item.stock) || 0;
+          const nuevoStock = Math.max(0, stockActual - item.cantidad);
+          batch.update(itemRef, { stock: nuevoStock });
+        }
       }
-    }
-    await batch.commit();
-    // --------------------------------------------------
-      
+      await batch.commit();
+
       // 2. Enviar correo usando EmailJS
       const emailPayload = {
         service_id: 'service_jfx0g2e',
         template_id: 'template_mhdgbsw',
         user_id: 'gFYWXFr3j_woisLA-',
         template_params: {
-  user_name: cliente.nombre,
-  order_id: orderId,
-  cart_summary: cartSummary,
-  total_price: `RD$ ${totalCart}`,
-  metodo_pago: cliente.metodoPago,
-  direccion: `${cliente.direccion} (${tarifasEnvio[zonaEnvio].nombre})`,
-  bloque_cita: bloqueCitaHTML,
-  bloque_bancos: bloqueBancosHTML,
-  to_email: cliente.email
-} // <-- Asegúrate de cerrar esta llave
+          user_name: cliente.nombre,
+          order_id: orderId,
+          cart_summary: cartSummary,
+          total_price: `RD$ ${totalCart}`,
+          metodo_pago: cliente.metodoPago,
+          direccion: `${cliente.direccion} (${tarifasEnvio[zonaEnvio].nombre})`,
+          bloque_cita: bloqueCitaHTML,
+          bloque_bancos: bloqueBancosHTML,
+          to_email: cliente.email
+        }
       };
 
       await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -342,7 +340,7 @@ export default function Home() {
             onClick={() => setIsCartOpen(true)}
             style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-             Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
+             🛒 Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
           </button>
         </div>
       </header>
@@ -368,7 +366,7 @@ export default function Home() {
         <div style={{ marginBottom: '20px', textAlign: 'center' }}>
           <input
             type="text"
-            placeholder=" Buscar producto (ej. cámara trasera, pantalla, radio)..."
+            placeholder="Buscar producto (ej. cámara trasera, pantalla, radio)..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{ width: '100%', maxWidth: '500px', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
@@ -397,87 +395,90 @@ export default function Home() {
         </div>
 
         {/* Listado de Productos */}
-          {loading ? (
-            <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>Cargando accesorios...</div>
-          ) : productosFiltrados.length === 0 ? (
-            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '40px', textAlign: 'center' }}>
-              No se encontraron productos coincidentes.
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
-              {productosFiltrados.map((prod) => {
-                const stock = Number(prod.stock ?? 0);
-                const sinStock = stock <= 0;
-                const pocoStock = stock > 0 && stock <= 2;
+        {loading ? (
+          <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>Cargando accesorios...</div>
+        ) : productosFiltrados.length === 0 ? (
+          <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '40px', textAlign: 'center' }}>
+            No se encontraron productos coincidentes.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
+            {productosFiltrados.map((prod) => {
+              const stock = Number(prod.stock ?? 0);
+              const sinStock = stock <= 0;
+              const pocoStock = stock > 0 && stock <= 2;
 
-                return (
-                  <div key={prod.id} style={{ backgroundColor: '#141414', border: pocoStock ? '1px solid #ff4d4d' : '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
-                    
-                    {/* BADGE DE INSTALACIÓN */}
-                    {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
-                      <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '4px', zIndex: 1 }}>
-                        🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
-                      </span>
-                    )}
+              return (
+                <div key={prod.id} style={{ backgroundColor: '#141414', border: pocoStock ? '1px solid #ff4d4d' : '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
+                  
+                  {/* BADGE DE INSTALACIÓN */}
+                  {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
+                    <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '4px', zIndex: 1 }}>
+                       🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
+                    </span>
+                  )}
 
-                    <div>
+                  <div>
+                    {prod.imagenUrl && (
                       <img src={prod.imagenUrl} alt={prod.nombre} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
-                      
-                      <div style={{ padding: '15px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '10px', backgroundColor: '#222', color: '#DDD', padding: '2px 6px', borderRadius: '4px' }}>
-                            {prod.categoria}
+                    )}
+                    
+                    <div style={{ padding: '15px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '10px', backgroundColor: '#222', color: '#DDD', padding: '2px 6px', borderRadius: '4px' }}>
+                          {prod.categoria || 'Accesorio'}
+                        </span>
+
+                        {/* ALERTAS DINÁMICAS DE STOCK */}
+                        {sinStock ? (
+                          <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
+                            🔴 AGOTADO
                           </span>
-
-                          {/* ALERTAS DINÁMICAS DE STOCK */}
-                          {sinStock ? (
-                            <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
-                              🔴 AGOTADO
-                            </span>
-                          ) : pocoStock ? (
-                            <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
-                              ⚠️ ¡Quedan solo {stock} unds!
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: '#888' }}>
-                              Stock: {stock}
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>
-                          {prod.nombre}
-                        </h3>
-                        <p style={{ fontSize: '18px', fontWeight: '900', color: '#E50914', margin: '0' }}>
-                          RD$ {prod.precio}
-                        </p>
+                        ) : pocoStock ? (
+                          <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                            ⚠️ ¡Quedan solo {stock} unds!
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#888' }}>
+                            Stock: {stock}
+                          </span>
+                        )}
                       </div>
-                    </div>
 
-                    <div style={{ padding: '15px', paddingTop: '0' }}>
-                      <button
-                        disabled={sinStock}
-                        onClick={() => addToCart(prod)}
-                        style={{
-                          width: '100%',
-                          backgroundColor: sinStock ? '#333' : pocoStock ? '#ff4d4d' : '#E50914',
-                          color: sinStock ? '#666' : '#FFF',
-                          border: 'none',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          fontWeight: 'bold',
-                          cursor: sinStock ? 'not-allowed' : 'pointer',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {sinStock ? 'Sin Stock' : pocoStock ? `¡Comprar Ahora! (${stock} disp.)` : '+ Agregar al Carrito'}
-                      </button>
+                      <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>
+                        {prod.nombre}
+                      </h3>
+                      <p style={{ fontSize: '18px', fontWeight: '900', color: '#E50914', margin: '0' }}>
+                        RD$ {prod.precio}
+                      </p>
                     </div>
                   </div>
-                );
+
+                  <div style={{ padding: '15px', paddingTop: '0' }}>
+                    <button
+                      disabled={sinStock}
+                      onClick={() => addToCart(prod)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: sinStock ? '#333' : pocoStock ? '#ff4d4d' : '#E50914',
+                        color: sinStock ? '#666' : '#FFF',
+                        border: 'none',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        cursor: sinStock ? 'not-allowed' : 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      {sinStock ? 'Sin Stock' : pocoStock ? `¡Comprar Ahora! (${stock} disp.)` : '+ Agregar al Carrito'}
+                    </button>
+                  </div>
+                </div>
+              );
             })}
-            </div>
-          )}
+          </div>
+        )}
+      </main>
 
       {/* Modal Carrito Adaptable */}
       {isCartOpen && (
@@ -487,7 +488,7 @@ export default function Home() {
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF', margin: 0 }}>Tu Carrito de Compras</h2>
-                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
               </div>
 
               {cart.length === 0 ? (
@@ -505,7 +506,7 @@ export default function Home() {
                           <button onClick={() => updateCantidad(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
                           <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{item.cantidad}</span>
                           <button onClick={() => updateCantidad(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
-                          <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>🗑</button>
+                          <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>✕</button>
                         </div>
                       </div>
 
@@ -552,7 +553,7 @@ export default function Home() {
       {isCheckoutOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 50, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '25px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
 
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#E50914', marginBottom: '15px' }}>Completar Pedido</h2>
 
@@ -602,7 +603,7 @@ export default function Home() {
               {/* Cita de Instalación (Si seleccionó alguna instalación) */}
               {tieneInstalacionSeleccionada && (
                 <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #333', padding: '12px', borderRadius: '8px', marginTop: '5px' }}>
-                  <h4 style={{ fontSize: '13px', color: '#FFB800', margin: '0 0 8px' }}>🔧 Agenda tu cita de instalación:</h4>
+                  <h4 style={{ fontSize: '13px', color: '#FFB800', margin: '0 0 8px' }}> Agenda tu cita de instalación:</h4>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <p style={{ fontSize: '11px', color: '#ff4d4d', margin: '0' }}>* Instalaciones exclusivamente los sábados.</p>
@@ -689,9 +690,9 @@ export default function Home() {
                 {/* ADVERTENCIA DE RESERVA DEL 30% */}
                 {requiereAnticipo30 && (
                   <div style={{ backgroundColor: '#2A1800', border: '1px solid #FFB800', padding: '10px', borderRadius: '6px', marginTop: '8px', fontSize: '11px', color: '#FFB800' }}>
-                    ⚠️ <b>Reserva requerida (30%):</b> {esCitaMasDeDosSemanas() ? 'Al agendar a 2 semanas o más, ' : ''}se debe realizar el pago del 30% (<b>RD$ {montoAnticipo.toFixed(2)}</b>) vía transferencia dentro de las próximas 12 horas.
+                     <b>Reserva requerida (30%):</b> {esCitaMasDeDosSemanas() ? 'Al agendar a 2 semanas o más, ' : ''}se debe realizar el pago del 30% (<b>RD$ {montoAnticipo.toFixed(2)}</b>) vía transferencia dentro de las próximas 12 horas.
                     <br /><br />
-                    ℹ️ <b>Política de Cancelación:</b> Cancelación gratuita dentro de los 2 días laborables tras realizar el pedido. Transcurrido ese plazo, el 30% no tiene reembolso.
+                     <b>Política de Cancelación:</b> Cancelación gratuita dentro de los 2 días laborables tras realizar el pedido. Transcurrido ese plazo, el 30% no tiene reembolso.
                   </div>
                 )}
               </div>
@@ -745,7 +746,7 @@ export default function Home() {
         </a>
       </div>
 
-     {/* Footer */}
+      {/* Footer */}
       <footer style={{ backgroundColor: '#000000', borderTop: '1px solid #222', padding: '25px', textAlign: 'center', fontSize: '12px' }}>
         <p style={{ margin: '0 0 5px' }}>Correo: <a href="mailto:grautoadornos@gmail.com" style={{ color: '#AAA', textDecoration: 'none' }}>grautoadornos@gmail.com</a></p>
         <p style={{ margin: 0 }}>© 2026 GR Auto Adornos. Todos los derechos reservados.</p>
