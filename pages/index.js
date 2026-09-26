@@ -234,6 +234,19 @@ export default function Home() {
       // 1. Guardar pedido en Firestore
       await addDoc(collection(db, 'pedidos'), pedidoData);
 
+      // --- CÓDIGO NUEVO: Descontar stock en Firestore ---
+    const batch = writeBatch(db);
+    for (const item of cart) {
+      if (item.id) {
+        const itemRef = doc(db, 'productos', item.id);
+        const stockActual = Number(item.stock) || 0;
+        const nuevoStock = Math.max(0, stockActual - item.cantidad);
+        batch.update(itemRef, { stock: nuevoStock });
+      }
+    }
+    await batch.commit();
+    // --------------------------------------------------
+      
       // 2. Enviar correo usando EmailJS
       const emailPayload = {
         service_id: 'service_jfx0g2e',
