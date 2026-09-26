@@ -129,7 +129,6 @@ export default function Home() {
   const costoEnvio = tieneInstalacionSeleccionada ? 0 : tarifasEnvio[zonaEnvio].costo;
   const totalCart = subtotalProductos + subtotalInstalaciones + costoEnvio;
 
-  // Evaluar reserva del 30% por fecha (2 semanas o más) o transferencia
   const esCitaMasDeDosSemanas = () => {
     if (!cliente.fechaCita) return false;
     const hoy = new Date();
@@ -141,14 +140,12 @@ export default function Home() {
   const requiereAnticipo30 = esCitaMasDeDosSemanas() || cliente.metodoPago === 'Transferencia Bancaria';
   const montoAnticipo = requiereAnticipo30 ? (totalCart * 0.30) : 0;
 
-  // Filtro de productos por categoría y buscador
   const productosFiltrados = productos.filter((p) => {
     const coincideCat = categoriaSel === 'Todos' || p.categoria === categoriaSel;
     const coincideBusqueda = (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
     return coincideCat && coincideBusqueda;
   });
 
-  // Validar y cargar citas de la fecha seleccionada
   const handleFechaChange = async (e) => {
     const fecha = e.target.value;
     if (!fecha) return;
@@ -242,10 +239,8 @@ export default function Home() {
     };
 
     try {
-      // 1. Guardar pedido en Firestore
       await addDoc(collection(db, 'pedidos'), pedidoData);
 
-      // Descontar stock en Firestore
       const batch = writeBatch(db);
       for (const item of cart) {
         if (item.id) {
@@ -257,7 +252,6 @@ export default function Home() {
       }
       await batch.commit();
 
-      // 2. Enviar correo usando EmailJS
       const emailPayload = {
         service_id: 'service_jfx0g2e',
         template_id: 'template_mhdgbsw',
@@ -281,7 +275,6 @@ export default function Home() {
         body: JSON.stringify(emailPayload)
       });
 
-      // 3. Confirmación según método de pago
       if (cliente.metodoPago === 'Pago Contra Entrega' && !requiereAnticipo30) {
         alert(`¡Pedido #${orderId} realizado con éxito! Te hemos enviado la confirmación a tu correo.`);
       } else {
@@ -429,7 +422,7 @@ export default function Home() {
                           {prod.categoria || 'Accesorio'}
                         </span>
 
-                        {/* ALERTAS DINÁMICAS DE STOCK */}
+                        {/* MOSTRAR STOCK SOLO SI ES <= 2 O AGOTADO */}
                         {sinStock ? (
                           <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
                             🔴 AGOTADO
@@ -438,11 +431,7 @@ export default function Home() {
                           <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
                             ⚠️ ¡Quedan solo {stock} unds!
                           </span>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: '#888' }}>
-                            Stock: {stock}
-                          </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>
@@ -510,7 +499,6 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* SELECCIONAR INSTALACION EN EL CARRITO */}
                       {(item.requiereInstalacion || item.costoInstalacion > 0) && (
                         <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <input 
@@ -579,7 +567,6 @@ export default function Home() {
                 <input required type="text" value={cliente.direccion} onChange={(e) => setCliente({ ...cliente, direccion: e.target.value })} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }} />
               </div>
 
-              {/* SELECCIÓN DE ZONA Y COSTO DE ENVÍO */}
               <div>
                 <label style={{ fontSize: '12px', color: '#AAA' }}>Zona de Entrega / Municipio *</label>
                 <select value={zonaEnvio} onChange={(e) => setZonaEnvio(e.target.value)} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>
@@ -591,7 +578,6 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* MÉTODO DE PAGO */}
               <div>
                 <label style={{ fontSize: '12px', color: '#AAA' }}>Método de Pago *</label>
                 <select value={cliente.metodoPago} onChange={(e) => setCliente({ ...cliente, metodoPago: e.target.value })} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>
@@ -600,7 +586,6 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* Cita de Instalación (Si seleccionó alguna instalación) */}
               {tieneInstalacionSeleccionada && (
                 <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #333', padding: '12px', borderRadius: '8px', marginTop: '5px' }}>
                   <h4 style={{ fontSize: '13px', color: '#FFB800', margin: '0 0 8px' }}> Agenda tu cita de instalación:</h4>
@@ -663,7 +648,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* RESUMEN DETALLADO Y REGLAS DE RESERVA */}
               <div style={{ backgroundColor: '#181818', padding: '12px', borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Productos:</span>
@@ -687,7 +671,6 @@ export default function Home() {
                   <span style={{ color: '#25D366' }}>RD$ {totalCart}</span>
                 </div>
 
-                {/* ADVERTENCIA DE RESERVA DEL 30% */}
                 {requiereAnticipo30 && (
                   <div style={{ backgroundColor: '#2A1800', border: '1px solid #FFB800', padding: '10px', borderRadius: '6px', marginTop: '8px', fontSize: '11px', color: '#FFB800' }}>
                      <b>Reserva requerida (30%):</b> {esCitaMasDeDosSemanas() ? 'Al agendar a 2 semanas o más, ' : ''}se debe realizar el pago del 30% (<b>RD$ {montoAnticipo.toFixed(2)}</b>) vía transferencia dentro de las próximas 12 horas.
@@ -697,7 +680,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Información Cuentas Bancarias */}
               <div style={{ backgroundColor: '#181818', border: '1px solid #333', padding: '12px', borderRadius: '8px', fontSize: '11px', color: '#CCC' }}>
                 <p style={{ fontWeight: 'bold', color: '#FFF', margin: '0 0 5px' }}>CUENTAS BANCARIAS PARA TRANSFERENCIA / RESERVA:</p>
                 <p style={{ margin: '2px 0' }}>• Banco Popular DOP: Cta. Ahorros N° 814423729</p>
