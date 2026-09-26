@@ -203,6 +203,11 @@ export default function MetricasAdmin() {
     return `${signo}${diff.toFixed(1)}%`;
   };
 
+  // Cálculo porcentual para barras visuales
+  const maxVentaGrafico = Math.max(metricasActuales.ventasTotales, metricasAnteriores.ventasTotales, 1);
+  const porcentajeBarraActual = Math.min(100, (metricasActuales.ventasTotales / maxVentaGrafico) * 100);
+  const porcentajeBarraAnterior = Math.min(100, (metricasAnteriores.ventasTotales / maxVentaGrafico) * 100);
+
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       <header style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
@@ -237,7 +242,7 @@ export default function MetricasAdmin() {
             {/* TARJETAS PRINCIPALES (KPIs) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '15px', marginBottom: '25px' }}>
 
-              {/* Ventas Totales Brutas */}
+              {/* Dinero Total Entrado */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', fontWeight: 'bold' }}>💵 Dinero Total Entrado</span>
@@ -254,7 +259,7 @@ export default function MetricasAdmin() {
                 </span>
               </div>
 
-              {/* Ganancia Neta Limpia */}
+              {/* Ganancia Limpia */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #25D366', borderRadius: '10px', padding: '18px' }}>
                 <span style={{ fontSize: '11px', color: '#25D366', textTransform: 'uppercase', fontWeight: 'bold' }}>🤑 Ganancia Limpia (Tuya)</span>
                 <h2 style={{ fontSize: '24px', color: '#25D366', margin: '8px 0' }}>RD$ {(metricasActuales.gananciaNeta || 0).toLocaleString()}</h2>
@@ -281,6 +286,40 @@ export default function MetricasAdmin() {
                 </div>
               </Link>
 
+            </div>
+
+            {/* 📊 GRÁFICO VISUAL DE BARRAS (COMPARATIVA MENSUAL) */}
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px', marginBottom: '25px' }}>
+              <h4 style={{ margin: '0 0 5px 0', fontSize: '16px', color: '#FFF' }}>
+                📊 Gráfico Visual de Ventas: Este Mes vs Mes Anterior
+              </h4>
+              <p style={{ margin: '0 0 20px 0', fontSize: '12px', color: '#888' }}>
+                Comparación directa del rendimiento general de ingresos entre ambos períodos.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {/* Barra Mes Seleccionado */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
+                    <span style={{ color: '#FFB800', fontWeight: 'bold' }}>Mes Actual ({mesSeleccionado})</span>
+                    <strong style={{ color: '#FFF' }}>RD$ {(metricasActuales.ventasTotales || 0).toLocaleString()}</strong>
+                  </div>
+                  <div style={{ width: '100%', backgroundColor: '#222', height: '16px', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ width: `${porcentajeBarraActual}%`, backgroundColor: '#E50914', height: '100%', borderRadius: '8px', transition: 'width 0.5s ease' }}></div>
+                  </div>
+                </div>
+
+                {/* Barra Mes Anterior */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
+                    <span style={{ color: '#888' }}>Mes Anterior</span>
+                    <strong style={{ color: '#AAA' }}>RD$ {(metricasAnteriores.ventasTotales || 0).toLocaleString()}</strong>
+                  </div>
+                  <div style={{ width: '100%', backgroundColor: '#222', height: '16px', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ width: `${porcentajeBarraAnterior}%`, backgroundColor: '#444', height: '100%', borderRadius: '8px', transition: 'width 0.5s ease' }}></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* TABLA DE DESGLOSE INTERACTIVO Y SENCILLO */}
