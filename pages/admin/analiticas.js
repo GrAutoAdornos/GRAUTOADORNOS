@@ -5,27 +5,30 @@ import { db } from '../../lib/firebase';
 
 export default function AnaliticasDashboard() {
   const [loading, setLoading] = useState(true);
-  const [pedidosOriginales, setPedidosOriginales] = useState([]);
+  const [pedidos, setPedidos] = useState([]);
   
-  // Estado del Filtro seleccionado ('todos', 'hoy', 'semana', 'mes', 'mes_pasado')
-  const [filtroTiempo, setFiltroTiempo] = useState('todos');
+  // Filtro de período seleccionado: 'mesActual', 'mesPasado', 'ultimos7Dias', 'hoy', 'todos'
+  const [filtroPeriodo, setFiltroPeriodo] = useState('mesActual');
 
   // Métricas calculadas dinámicamente
-  const [ventasFiltradasTotal, setVentasFiltradasTotal] = useState(0);
-  const [totalPedidosFiltrados, setTotalPedidosFiltrados] = useState(0);
+  const [ventasPeriodo, setVentasPeriodo] = useState(0);
+  const [ventasDiarias, setVentasDiarias] = useState(0);
+  const [ventasSemanales, setVentasSemanales] = useState(0);
+  const [ventasMensuales, setVentasMensuales] = useState(0);
+  const [ventasMesPasado, setVentasMesPasado] = useState(0);
   const [productosMasVendidos, setProductosMasVendidos] = useState([]);
   const [ingresosPorZona, setIngresosPorZona] = useState({});
+  const [totalPedidosCount, setTotalPedidosCount] = useState(0);
 
   useEffect(() => {
     cargarDatosAnalitica();
   }, []);
 
-  // Cada vez que cambie el filtro, recalculamos las métricas con los datos ya descargados
   useEffect(() => {
-    if (pedidosOriginales.length > 0) {
-      procesarMetricasConFiltro(pedidosOriginales, filtroTiempo);
+    if (pedidos.length > 0) {
+      calcularMetricas(pedidos, filtroPeriodo);
     }
-  }, [filtroTiempo, pedidosOriginales]);
+  }, [filtroPeriodo, pedidos]);
 
   const cargarDatosAnalitica = async () => {
     try {
@@ -34,8 +37,8 @@ export default function AnaliticasDashboard() {
       snapPedidos.forEach((doc) => {
         listaPedidos.push({ id: doc.id, ...doc.data() });
       });
-      setPedidosOriginales(listaPedidos);
-      procesarMetricasConFiltro(listaPedidos, 'todos');
+      setPedidos(listaPedidos);
+      calcularMetricas(listaPedidos, 'mesActual');
     } catch (error) {
       console.error("Error al cargar datos para analíticas:", error);
     } finally {
@@ -43,7 +46,14 @@ export default function AnaliticasDashboard() {
     }
   };
 
-  const procesarMetricasConFiltro = (listaPedidos, filtro) => {
+  const calcularMetricas = (listaPedidos, periodo) => {
+    let tTotal = 0;
+    let tDiario = 0;
+    let tSemanal = 0;
+    let tMensual = 0;
+    let tMesPasado = 0;
+    let tFiltrado = 0;
+
     const ahora = new Date();
     const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
     
@@ -53,48 +63,58 @@ export default function AnaliticasDashboard() {
     const mesActual = ahora.getMonth();
     const anioActual = ahora.getFullYear();
 
-    const mesPasadoIndex = mesActual === 0 ? 11 : mesActual - 1;
-    const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual;
+    // Calcular Mes Pasado
+    const fechaMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
+    const mesPasadoIndex = fechaMesPasado.getMonth();
+    const anioMesPasado = fechaMesPasado.getFullYear();
 
-    let tTotal = 0;
-    let contadorPedidos = 0;
     const prodConteo = {};
     const zonaConteo = {};
+    let cuentaPedidosFiltrados = 0;
 
     listaPedidos.forEach((p) => {
-      // Ignorar pedidos cancelados para las finanzas
-      if (p.estado === 'Cancelado') return;
+      const monto = Number(p.total || 0);
 
-      // Obtener fecha real del pedido
+      // Procesar fecha del pedido
       let fechaPedido = ahora;
       if (p.fecha?.toDate) {
         fechaPedido = p.fecha.toDate();
       } else if (p.fecha) {
         fechaPedido = new Date(p.fecha);
       }
+
       const tiempoPedido = fechaPedido.getTime();
 
-      // Aplicar lógica de filtrado por tiempo
-      let cumpleFiltro = true;
-      if (filtro === 'hoy') {
-        cumpleFiltro = tiempoPedido >= inicioHoy;
-      } else if (filtro === 'semana') {
-        cumpleFiltro = fechaPedido >= hace7Dias;
-      } else if (filtro === 'mes') {
-        cumpleFiltro = fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual;
-      } else if (filtro === 'mes_pasado') {
-        cumpleFiltro = fechaPedido.getMonth() === mesPasadoIndex && fechaPedido.getFullYear() === anioMesPasado;
+      // Métricas de tarjetas fijas (independientes del filtro)
+      if (p.estado !== 'Cancelado') {
+        tTotal += monto;
+
+        if (tiempoPedido >= inicioHoy) tDiario += monto;
+        if (fechaPedido >= hace7Dias) tSemanal += monto;
+        if (fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual) tMensual += monto;
+        if (fechaPedido.getMonth() === mesPasadoIndex && fechaPedido.getFullYear() === anioMesPasado) tMesPasado += monto;
       }
 
-      if (cumpleFiltro) {
-        const monto = Number(p.total || 0);
-        tTotal += monto;
-        contadorPedidos += 1;
+      // Evaluar si cumple con el filtro seleccionado para la vista detallada
+      let cumpleFiltro = true;
+      if (periodo === 'mesActual') {
+        cumpleFiltro = fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual;
+      } else if (periodo === 'mesPasado') {
+        cumpleFiltro = fechaPedido.getMonth() === mesPasadoIndex && fechaPedido.getFullYear() === anioMesPasado;
+      } else if (periodo === 'ultimos7Dias') {
+        cumpleFiltro = fechaPedido >= hace7Dias;
+      } else if (periodo === 'hoy') {
+        cumpleFiltro = tiempoPedido >= inicioHoy;
+      }
 
-        // Conteo de Productos más vendidos
+      if (cumpleFiltro && p.estado !== 'Cancelado') {
+        tFiltrado += monto;
+        cuentaPedidosFiltrados++;
+
+        // Productos más vendidos del periodo
         if (p.productosDetalle && Array.isArray(p.productosDetalle)) {
           p.productosDetalle.forEach((item) => {
-            const nombreProd = item.nombre || item.titulo || 'Producto sin nombre';
+            const nombreProd = item.nombre || 'Producto sin nombre';
             const cantidad = Number(item.cantidad || 1);
             prodConteo[nombreProd] = (prodConteo[nombreProd] || 0) + cantidad;
           });
@@ -102,21 +122,25 @@ export default function AnaliticasDashboard() {
           prodConteo[p.detalles] = (prodConteo[p.detalles] || 0) + 1;
         }
 
-        // Conteo por Zonas de Envío
+        // Ingresos por Zona del periodo
         const zona = p.zonaEnvio || p.direccion || 'No especificada';
         zonaConteo[zona] = (zonaConteo[zona] || 0) + monto;
       }
     });
 
-    setVentasFiltradasTotal(tTotal);
-    setTotalPedidosFiltrados(contadorPedidos);
+    setVentasTotales(tTotal);
+    setVentasDiarias(tDiario);
+    setVentasSemanales(tSemanal);
+    setVentasMensuales(tMensual);
+    setVentasMesPasado(tMesPasado);
+    setVentasPeriodo(tFiltrado);
+    setTotalPedidosCount(cuentaPedidosFiltrados);
 
-    // Ordenar productos más vendidos (Top 5)
     const productosOrdenados = Object.keys(prodConteo)
       .map((nombre) => ({ nombre, cantidad: prodConteo[nombre] }))
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 5);
-    
+      
     setProductosMasVendidos(productosOrdenados);
     setIngresosPorZona(zonaConteo);
   };
@@ -129,7 +153,7 @@ export default function AnaliticasDashboard() {
           <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#E50914', textTransform: 'uppercase', margin: 0 }}>
             📊 GR Analíticas & Reportes
           </h1>
-          <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0 0' }}>Métricas de rendimiento e inventario con filtros de fecha</p>
+          <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0 0' }}>Métricas financieras y rendimiento de inventario</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => window.location.href = '/admin/pedidos'} style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -142,72 +166,74 @@ export default function AnaliticasDashboard() {
       </div>
 
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-        
-        {/* BARRA DE FILTROS */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#141414', border: '1px solid #222', padding: '15px 20px', borderRadius: '10px', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#FFB800' }}>
-            🔎 Filtrar Analíticas por Período:
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {[
-              { id: 'todos', label: 'Todo el Tiempo' },
-              { id: 'hoy', label: 'Hoy' },
-              { id: 'semana', label: 'Últimos 7 Días' },
-              { id: 'mes', label: 'Mes Actual' },
-              { id: 'mes_pasado', label: 'Mes Pasado' }
-            ].map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFiltroTiempo(f.id)}
-                style={{
-                  backgroundColor: filtroTiempo === f.id ? '#E50914' : '#1A1A1A',
-                  color: filtroTiempo === f.id ? '#FFF' : '#AAA',
-                  border: filtroTiempo === f.id ? '1px solid #E50914' : '1px solid #333',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer'
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {loading ? (
-          <p style={{ color: '#888', textAlign: 'center', padding: '50px 0' }}>Cargando analíticas...</p>
+          <p style={{ color: '#888', textAlign: 'center', padding: '50px 0' }}>Calculando analíticas financieras...</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
             
-            {/* TARJETAS DE RESULTADOS SEGÚN FILTRO */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-              
-              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '25px' }}>
-                <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Ventas Totales en el Período</span>
-                <h3 style={{ fontSize: '32px', fontWeight: '900', color: '#25D366', margin: '10px 0 0 0' }}>
-                  RD$ {ventasFiltradasTotal.toLocaleString()}
-                </h3>
-              </div>
+            {/* TARJETAS DE VENTAS GENERALES */}
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '12px' }}>💰 Resumen Financiero Rápido</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '15px' }}>
+                
+                <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Ventas de Hoy</span>
+                  <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#25D366', margin: '6px 0 0 0' }}>
+                    RD$ {ventasDiarias.toLocaleString()}
+                  </h3>
+                </div>
 
-              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '25px' }}>
-                <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Órdenes Registradas en el Período</span>
-                <h3 style={{ fontSize: '32px', fontWeight: '900', color: '#FFB800', margin: '10px 0 0 0' }}>
-                  {totalPedidosFiltrados} pedidos
-                </h3>
-              </div>
+                <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Últimos 7 Días</span>
+                  <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#25D366', margin: '6px 0 0 0' }}>
+                    RD$ {ventasSemanales.toLocaleString()}
+                  </h3>
+                </div>
 
+                <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Mes Actual</span>
+                  <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#25D366', margin: '6px 0 0 0' }}>
+                    RD$ {ventasMensuales.toLocaleString()}
+                  </h3>
+                </div>
+
+                <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>📅 Mes Pasado</span>
+                  <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#38BDF8', margin: '6px 0 0 0' }}>
+                    RD$ {ventasMesPasado.toLocaleString()}
+                  </h3>
+                </div>
+
+              </div>
             </div>
 
-            {/* PRODUCTOS MÁS VENDIDOS Y ZONAS */}
+            {/* BARRA DE FILTRO DE PERÍODO PARA PRODUCTOS Y ZONAS */}
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', color: '#FFF' }}>🔍 Filtrar Reporte Detallado</h3>
+                <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>Ventas en este periodo: <strong style={{ color: '#25D366' }}>RD$ {ventasPeriodo.toLocaleString()}</strong> ({totalPedidosCount} órdenes)</p>
+              </div>
+
+              <select
+                value={filtroPeriodo}
+                onChange={(e) => setFiltroPeriodo(e.target.value)}
+                style={{ backgroundColor: '#1F1F1F', color: '#FFB800', border: '1px solid #444', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="mesActual">📅 Mes Actual</option>
+                <option value="mesPasado">📅 Mes Pasado (Comparativa)</option>
+                <option value="ultimos7Dias">⚡ Últimos 7 Días</option>
+                <option value="hoy">⭐ Hoy</option>
+                <option value="todos">📦 Todo el Histórico</option>
+              </select>
+            </div>
+
+            {/* PRODUCTOS MÁS VENDIDOS & ZONAS SEGÚN EL FILTRO */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
               
-              {/* Productos más vendidos */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>🔥 Top Productos Vendidos (En este período)</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>🔥 Productos Más Vendidos</h2>
                 {productosMasVendidos.length === 0 ? (
-                  <p style={{ color: '#666', fontSize: '13px' }}>No hay ventas registradas en este período.</p>
+                  <p style={{ color: '#666', fontSize: '13px' }}>No hay registros en este período.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {productosMasVendidos.map((prod, index) => (
@@ -225,11 +251,10 @@ export default function AnaliticasDashboard() {
                 )}
               </div>
 
-              {/* Ingresos por Zona */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>📍 Ingresos por Zonas (En este período)</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>📍 Ingresos por Zonas de Envío</h2>
                 {Object.keys(ingresosPorZona).length === 0 ? (
-                  <p style={{ color: '#666', fontSize: '13px' }}>No hay registros de zonas en este período.</p>
+                  <p style={{ color: '#666', fontSize: '13px' }}>No hay registros en este período.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '220px', overflowY: 'auto' }}>
                     {Object.entries(ingresosPorZona).map(([zona, monto], index) => (
