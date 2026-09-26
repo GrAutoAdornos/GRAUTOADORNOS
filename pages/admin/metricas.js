@@ -18,7 +18,8 @@ export default function MetricasAdmin() {
     totalInstalaciones: 0,
     totalEnvios: 0,
     gananciaNeta: 0,
-    cantidadOrdenes: 0
+    cantidadOrdenes: 0,
+    promedioPorPedido: 0
   });
 
   const [metricasAnteriores, setMetricasAnteriores] = useState({
@@ -88,7 +89,6 @@ export default function MetricasAdmin() {
 
         const netoProductoOrden = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
 
-        // Guardar cada orden con el desglose exacto de a dónde va cada peso
         listaPedidosDesglose.push({
           idOrden: p.id ? p.id.substring(0, 8) : 'ORDEN',
           cliente: p.cliente || p.nombre || 'Cliente General',
@@ -124,6 +124,7 @@ export default function MetricasAdmin() {
 
     const ingresoProductos = ventasTotales - totalInstalaciones - totalEnvios;
     const gananciaNeta = ingresoProductos - costoProductosVendidos;
+    const promedioPorPedido = cantidadOrdenes > 0 ? (ventasTotales / cantidadOrdenes) : 0;
 
     return {
       ventasTotales,
@@ -133,6 +134,7 @@ export default function MetricasAdmin() {
       totalEnvios,
       gananciaNeta,
       cantidadOrdenes,
+      promedioPorPedido,
       listaPedidosDesglose
     };
   }, []);
@@ -238,7 +240,7 @@ export default function MetricasAdmin() {
               {/* Ventas Totales Brutas */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', fontWeight: 'bold' }}>Ventas Totales Brutas</span>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', fontWeight: 'bold' }}>💵 Dinero Total Entrado</span>
                   <button
                     onClick={() => setMostrarDesgloseVentas(!mostrarDesgloseVentas)}
                     style={{ background: '#222', color: '#FFB800', border: '1px solid #FFB800', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -254,7 +256,7 @@ export default function MetricasAdmin() {
 
               {/* Ganancia Neta Limpia */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #25D366', borderRadius: '10px', padding: '18px' }}>
-                <span style={{ fontSize: '11px', color: '#25D366', textTransform: 'uppercase', fontWeight: 'bold' }}>Ganancia Neta Limpia</span>
+                <span style={{ fontSize: '11px', color: '#25D366', textTransform: 'uppercase', fontWeight: 'bold' }}>🤑 Ganancia Limpia (Tuya)</span>
                 <h2 style={{ fontSize: '24px', color: '#25D366', margin: '8px 0' }}>RD$ {(metricasActuales.gananciaNeta || 0).toLocaleString()}</h2>
                 <span style={{ fontSize: '12px', color: (metricasActuales.gananciaNeta >= metricasAnteriores.gananciaNeta) ? '#25D366' : '#FF4D4D', fontWeight: 'bold' }}>
                   {calcularVariacion(metricasActuales.gananciaNeta, metricasAnteriores.gananciaNeta)} <span style={{ color: '#666', fontWeight: 'normal' }}>vs mes anterior</span>
@@ -354,51 +356,70 @@ export default function MetricasAdmin() {
               </div>
             )}
 
-            {/* BALANCE DETALLADO Y CAPITAL */}
+            {/* BALANCE EXPLICADO PASO A PASO (SIN ENREDOS CONTABLES) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
 
-              {/* Comparativa Mensual */}
+              {/* ¿De dónde sale tu dinero? */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
-                <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#E50914' }}>
-                  📊 Cálculo de Ganancia Real
+                <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#25D366' }}>
+                  💡 ¿Cómo se calcula tu Ganancia Limpia?
                 </h4>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
-                  <span style={{ color: '#AAA' }}>Venta Bruta de Productos:</span>
-                  <span>RD$ {(metricasActuales.ingresoProductos || 0).toLocaleString()}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
+                  <span style={{ color: '#AAA' }}>📦 Cobrado por Productos (Sin envíos ni instalaciones):</span>
+                  <strong style={{ color: '#FFF' }}>RD$ {(metricasActuales.ingresoProductos || 0).toLocaleString()}</strong>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
-                  <span style={{ color: '#AAA' }}>- Costo de Productos (Mercancía):</span>
-                  <span style={{ color: '#FF4D4D' }}>RD$ {(metricasActuales.costoProductosVendidos || 0).toLocaleString()}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
+                  <span style={{ color: '#AAA' }}>🔴 Menos el Costo Real de esa Mercancía:</span>
+                  <strong style={{ color: '#FF4D4D' }}>- RD$ {(metricasActuales.costoProductosVendidos || 0).toLocaleString()}</strong>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
-                  <span style={{ color: '#AAA' }}>Ganancia Mes Anterior:</span>
-                  <span>RD$ {(metricasAnteriores.gananciaNeta || 0).toLocaleString()}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 5px 0', fontSize: '14px', backgroundColor: '#0D0D0D', margin: '10px -10px -10px -10px', padding: '12px 10px', borderRadius: '6px' }}>
+                  <span style={{ color: '#25D366', fontWeight: 'bold' }}>🟢 Ganancia Real (Limpia para ti):</span>
+                  <strong style={{ color: '#25D366', fontSize: '16px' }}>RD$ {(metricasActuales.gananciaNeta || 0).toLocaleString()}</strong>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0 0', fontSize: '14px' }}>
-                  <strong>Crecimiento Ganancias:</strong>
+                <div style={{ marginTop: '15px', borderTop: '1px solid #222', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#888' }}>
+                  <span>Ganancia del Mes Anterior:</span>
+                  <span style={{ color: '#FFF' }}>RD$ {(metricasAnteriores.gananciaNeta || 0).toLocaleString()}</span>
+                </div>
+
+                <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#888' }}>
+                  <span>Crecimiento de Tu Negocio:</span>
                   <strong style={{ color: (metricasActuales.gananciaNeta >= metricasAnteriores.gananciaNeta) ? '#25D366' : '#FF4D4D' }}>
                     {calcularVariacion(metricasActuales.gananciaNeta, metricasAnteriores.gananciaNeta)}
                   </strong>
                 </div>
               </div>
 
-              {/* Capital Actual en Almacén */}
-              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
-                <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#FFF' }}>
-                  🏢 Capital Invertido Actual (Almacén)
-                </h4>
+              {/* MÁSFÁCIL PARA TI: DATOS DE CONTROL RÁPIDO */}
+              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#FFF' }}>
+                    📈 Resumen Rápido para el Dueño
+                  </h4>
 
-                <p style={{ fontSize: '12px', color: '#888', margin: '0 0 15px 0' }}>
-                  Valor total del dinero retenido en mercancía disponible en tu inventario actual.
-                </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+                    <div style={{ backgroundColor: '#0D0D0D', padding: '12px', borderRadius: '8px', border: '1px solid #222' }}>
+                      <span style={{ fontSize: '11px', color: '#888' }}>Venta Promedio por Cliente</span>
+                      <h4 style={{ margin: '5px 0 0 0', color: '#FFF', fontSize: '15px' }}>
+                        RD$ {(metricasActuales.promedioPorPedido || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </h4>
+                    </div>
+                    <div style={{ backgroundColor: '#0D0D0D', padding: '12px', borderRadius: '8px', border: '1px solid #222' }}>
+                      <span style={{ fontSize: '11px', color: '#888' }}>Total Venta de Pedidos</span>
+                      <h4 style={{ margin: '5px 0 0 0', color: '#25D366', fontSize: '15px' }}>
+                        {metricasActuales.cantidadOrdenes || 0} órdenes
+                      </h4>
+                    </div>
+                  </div>
+                </div>
 
                 <div style={{ backgroundColor: '#0D0D0D', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Valor Total de Mercancía</span>
-                  <h2 style={{ fontSize: '26px', color: '#FFF', margin: '5px 0' }}>RD$ {(capitalInvertidoTotal || 0).toLocaleString()}</h2>
+                  <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>🏢 Mercancía Invertida en Almacén</span>
+                  <h2 style={{ fontSize: '24px', color: '#FFF', margin: '5px 0' }}>RD$ {(capitalInvertidoTotal || 0).toLocaleString()}</h2>
+                  <span style={{ fontSize: '11px', color: '#666' }}>Dinero guardado actualmente en stock</span>
                 </div>
               </div>
 
