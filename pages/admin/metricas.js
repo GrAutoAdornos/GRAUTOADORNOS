@@ -10,7 +10,6 @@ export default function MetricasAdmin() {
   const [loading, setLoading] = useState(true);
   const [mesSeleccionado, setMesSeleccionado] = useState(obtenerMesActual());
   
-  // Datos procesados
   const [metricasActuales, setMetricasActuales] = useState({});
   const [metricasAnteriores, setMetricasAnteriores] = useState({});
   const [capitalInvertidoTotal, setCapitalInvertidoTotal] = useState(0);
@@ -19,7 +18,7 @@ export default function MetricasAdmin() {
     const hoy = new Date();
     const mm = String(hoy.getMonth() + 1).padStart(2, '0');
     const yyyy = hoy.getFullYear();
-    return `${yyyy}-${mm}`; // Formato: YYYY-MM
+    return `${yyyy}-${mm}`;
   }
 
   useEffect(() => {
@@ -30,28 +29,28 @@ export default function MetricasAdmin() {
   const cargarContabilidad = async () => {
     setLoading(true);
     try {
-      // 1. Obtener todos los productos para calcular costo y ganancia real
+      // 1. Cargar productos para mapa de costos
       const snapProds = await getDocs(collection(db, 'productos'));
       const mapaProductos = {};
       let totalCapitalInventario = 0;
 
       snapProds.forEach((doc) => {
         const p = doc.data();
-        const costoUnitario = Number(p.costo ?? p.precio * 0.6); // Si no hay costo guardado, asume 60% costo
+        const costoUnitario = Number(p.costo ?? (p.precio ? p.precio * 0.5 : 0));
         const stockActual = Number(p.stock ?? 0);
         
         mapaProductos[p.nombre] = {
           precio: Number(p.precio ?? 0),
-          costo: costoUnitario
+          costo: costoUnitario,
+          precioInstalacion: Number(p.precioInstalacion ?? p.instalacionPrecio ?? 700) // Tarifa base por instalación
         };
 
-        // Capital total invertido actualmente en el almacén
         totalCapitalInventario += (stockActual * costoUnitario);
       });
 
       setCapitalInvertidoTotal(totalCapitalInventario);
 
-      // 2. Obtener todos los pedidos
+      // 2. Cargar todos los pedidos
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
       const pedidos = [];
       snapPedidos.forEach((doc) => pedidos.push({ id: doc.id, ...doc.data() }));
@@ -64,7 +63,7 @@ export default function MetricasAdmin() {
       fechaAnt.setMonth(fechaAnt.getMonth() - 1);
       const mesAnteriorStr = `${fechaAnt.getFullYear()}-${String(fechaAnt.getMonth() + 1).padStart(2, '0')}`;
 
-      // 4. Calcular Métricas para Mes Seleccionado y Mes Anterior
+      // 4. Calcular métricas
       const actual = calcularTotalesPorMes(pedidos, mesSeleccionado, mapaProductos);
       const anterior = calcularTotalesPorMes(pedidos, mesAnteriorStr, mapaProductos);
 
@@ -86,25 +85,46 @@ export default function MetricasAdmin() {
     let cantidadOrdenes = 0;
 
     pedidos.forEach((p) => {
-      // Intenta extraer la fecha de la orden (soporta timestamp de Firebase o string)
       let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
       const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
       if (mesPedido === claveMes) {
         cantidadOrdenes++;
-        
         const totalOrden = Number(p.total ?? 0);
-        const costoEnvio = Number(p.costoEnvio ?? p.envio ?? 0);
-        const costoInstalacion = Number(p.costoInstalacion ?? p.instalacion ?? 0);
-
         ventasTotales += totalOrden;
-        totalEnvios += costoEnvio;
-        totalInstalaciones += costoInstalacion;
 
-        // Estimar o calcular costo de productos vendidos en esta orden
-        const detalles = p.detalles || '';
+        const detalles = p.detalles || p.productos || '';
+        let costoInstalacionOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
+        let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
+
+        // --- EXTRACCIÓN DE INSTALACIÓN ---
+        if (costoInstalacionOrden === 0 && detalles.toLowerCase().includes('instalación')) {
+          Object.keys(mapaProductos).forEach((nombreProd) => {
+            if (detalles.includes(nombreProd)) {
+              const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
+              const match = detalles.match(regex);
+              const cant = match ? parseInt(match[1], 10) : 1;
+              const tarifaInst = mapaProductos[nombreProd].precioInstalacion || 700;
+              
+              costoInstalacionOrden += (tarifaInst * cant);
+            }
+          });
+          if (costoInstalacionOrden === 0) costoInstalacionOrden = 700; // Valor predeterminado de instalación por orden
+        }
+
+        // --- EXTRACCIÓN DE ENVÍO / TRANSPORTISTA ---
+        if (costoEnvioOrden === 0) {
+          const textoMin = detalles.toLowerCase();
+          if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
+          else if (textoMin.includes('santo domingo')) costoEnvioOrden = 350;
+          else if (textoMin.includes('envío') || textoMin.includes('envio') || textoMin.includes('domicilio')) costoEnvioOrden = 300;
+        }
+
+        totalInstalaciones += costoInstalacionOrden;
+        totalEnvios += costoEnvioOrden;
+
+        // --- COSTO DE PRODUCTOS ---
         let costoProdEnOrden = 0;
-
         Object.keys(mapaProductos).forEach((nombreProd) => {
           if (detalles.includes(nombreProd)) {
             const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
@@ -115,19 +135,16 @@ export default function MetricasAdmin() {
           }
         });
 
-        // Si no se pudo parsear el detalle, se estima costo como el 60% del neto de productos
         if (costoProdEnOrden === 0) {
-          const netoProd = Math.max(0, totalOrden - costoEnvio - costoInstalacion);
-          costoProdEnOrden = netoProd * 0.6;
+          const netoProd = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
+          costoProdEnOrden = netoProd * 0.5; // Estimación 50% de costo si no se detecta el producto exacto
         }
 
         costoProductosVendidos += costoProdEnOrden;
       }
     });
 
-    // Cuentas Netas
-    const ingresosNetosProductos = ventasTotales - totalEnvios - totalInstalaciones;
-    const gananciaNeta = ingresosNetosProductos - costoProductosVendidos;
+    const gananciaNeta = ventasTotales - costoProductosVendidos - totalInstalaciones - totalEnvios;
 
     return {
       ventasTotales,
@@ -139,7 +156,6 @@ export default function MetricasAdmin() {
     };
   };
 
-  // Porcentaje de variación con el mes anterior
   const calcularVariacion = (actual, anterior) => {
     if (!anterior || anterior === 0) return actual > 0 ? '+100%' : '0%';
     const diff = ((actual - anterior) / anterior) * 100;
@@ -198,17 +214,17 @@ export default function MetricasAdmin() {
               </div>
 
               {/* Pago a Técnico (Instalaciones) */}
-              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+              <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '18px' }}>
                 <span style={{ fontSize: '11px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>🔧 Por Pagar a Técnico</span>
                 <h2 style={{ fontSize: '24px', color: '#FFB800', margin: '8px 0' }}>RD$ {metricasActuales.totalInstalaciones?.toLocaleString()}</h2>
-                <p style={{ margin: 0, fontSize: '11px', color: '#666' }}>Total en instalaciones del mes</p>
+                <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total en instalaciones del mes</p>
               </div>
 
               {/* Pago a Transportista (Envíos) */}
-              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
+              <div style={{ backgroundColor: '#141414', border: '1px solid #3182CE', borderRadius: '10px', padding: '18px' }}>
                 <span style={{ fontSize: '11px', color: '#3182CE', textTransform: 'uppercase', fontWeight: 'bold' }}>🚚 Por Pagar a Transportista</span>
                 <h2 style={{ fontSize: '24px', color: '#3182CE', margin: '8px 0' }}>RD$ {metricasActuales.totalEnvios?.toLocaleString()}</h2>
-                <p style={{ margin: 0, fontSize: '11px', color: '#666' }}>Total en fletes/envíos del mes</p>
+                <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total en fletes/envíos del mes</p>
               </div>
 
             </div>
@@ -216,7 +232,6 @@ export default function MetricasAdmin() {
             {/* BALANCE DETALLADO Y CAPITAL */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               
-              {/* Resumen del Mes Elegido vs Anterior */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#E50914' }}>
                   📊 Comparativa Contable Mensual
@@ -245,14 +260,13 @@ export default function MetricasAdmin() {
                 </div>
               </div>
 
-              {/* Capital Actual en Almacén */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#FFF' }}>
                   🏢 Capital Invertido Actual (Almacén)
                 </h4>
 
                 <p style={{ fontSize: '12px', color: '#888', margin: '0 0 15px 0' }}>
-                  Valor total del dinero que tienes retenido en mercancía actualmente guardada en tu inventario disponible.
+                  Valor total del dinero retenido en mercancía en inventario disponible.
                 </p>
 
                 <div style={{ backgroundColor: '#0D0D0D', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'center' }}>
