@@ -1,6 +1,6 @@
 // pages/index.js
 import { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export default function Home() {
