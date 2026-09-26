@@ -13,6 +13,7 @@ export default function MetricasAdmin() {
   // Métricas Principales
   const [metricasActuales, setMetricasActuales] = useState({
     ventasTotales: 0,
+    ingresoProductos: 0,
     costoProductosVendidos: 0,
     totalInstalaciones: 0,
     totalEnvios: 0,
@@ -63,14 +64,6 @@ export default function MetricasAdmin() {
         let costoInstalacionOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
         let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
 
-        // Guardar para el desglose detallado
-        listaPedidosDesglose.push({
-          idOrden: p.id ? p.id.substring(0, 8) : 'ORDEN',
-          cliente: p.cliente || p.nombre || 'Cliente General',
-          fecha: fechaPedido.toLocaleDateString('es-DO'),
-          monto: totalOrden
-        });
-
         // Extracción de Instalación por Unidad
         if (costoInstalacionOrden === 0 && detalles.toLowerCase().includes('instalación')) {
           Object.keys(mapaProductos).forEach((nombreProd) => {
@@ -93,6 +86,19 @@ export default function MetricasAdmin() {
           else if (textoMin.includes('envío') || textoMin.includes('envio') || textoMin.includes('domicilio')) costoEnvioOrden = 300;
         }
 
+        const netoProductoOrden = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
+
+        // Guardar cada orden con el desglose exacto de a dónde va cada peso
+        listaPedidosDesglose.push({
+          idOrden: p.id ? p.id.substring(0, 8) : 'ORDEN',
+          cliente: p.cliente || p.nombre || 'Cliente General',
+          fecha: fechaPedido.toLocaleDateString('es-DO'),
+          montoProducto: netoProductoOrden,
+          montoInstalacion: costoInstalacionOrden,
+          montoEnvio: costoEnvioOrden,
+          montoTotal: totalOrden
+        });
+
         totalInstalaciones += costoInstalacionOrden;
         totalEnvios += costoEnvioOrden;
 
@@ -109,18 +115,19 @@ export default function MetricasAdmin() {
         });
 
         if (costoProdEnOrden === 0) {
-          const netoProd = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
-          costoProdEnOrden = netoProd * 0.5;
+          costoProdEnOrden = netoProductoOrden * 0.5;
         }
 
         costoProductosVendidos += costoProdEnOrden;
       }
     });
 
-    const gananciaNeta = ventasTotales - costoProductosVendidos - totalInstalaciones - totalEnvios;
+    const ingresoProductos = ventasTotales - totalInstalaciones - totalEnvios;
+    const gananciaNeta = ingresoProductos - costoProductosVendidos;
 
     return {
       ventasTotales,
+      ingresoProductos,
       costoProductosVendidos,
       totalInstalaciones,
       totalEnvios,
@@ -133,7 +140,6 @@ export default function MetricasAdmin() {
   const cargarContabilidad = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Cargar productos para mapa de costos
       const snapProds = await getDocs(collection(db, 'productos'));
       const mapaProductos = {};
       let totalCapitalInventario = 0;
@@ -155,12 +161,10 @@ export default function MetricasAdmin() {
 
       setCapitalInvertidoTotal(totalCapitalInventario);
 
-      // 2. Cargar todos los pedidos
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
       const pedidos = [];
       snapPedidos.forEach((doc) => pedidos.push({ id: doc.id, ...doc.data() }));
 
-      // 3. Determinar Mes Anterior
       const [yearStr, monthStr] = mesSeleccionado.split('-');
       const fechaSel = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1);
 
@@ -168,7 +172,6 @@ export default function MetricasAdmin() {
       fechaAnt.setMonth(fechaAnt.getMonth() - 1);
       const mesAnteriorStr = `${fechaAnt.getFullYear()}-${String(fechaAnt.getMonth() + 1).padStart(2, '0')}`;
 
-      // 4. Calcular métricas
       const actual = calcularTotalesPorMes(pedidos, mesSeleccionado, mapaProductos);
       const anterior = calcularTotalesPorMes(pedidos, mesAnteriorStr, mapaProductos);
 
@@ -232,7 +235,7 @@ export default function MetricasAdmin() {
             {/* TARJETAS PRINCIPALES (KPIs) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '15px', marginBottom: '25px' }}>
 
-              {/* Ventas Totales con Botón de Desglose */}
+              {/* Ventas Totales Brutas */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', fontWeight: 'bold' }}>Ventas Totales Brutas</span>
@@ -249,7 +252,7 @@ export default function MetricasAdmin() {
                 </span>
               </div>
 
-              {/* Ganancia Neta */}
+              {/* Ganancia Neta Limpia */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #25D366', borderRadius: '10px', padding: '18px' }}>
                 <span style={{ fontSize: '11px', color: '#25D366', textTransform: 'uppercase', fontWeight: 'bold' }}>Ganancia Neta Limpia</span>
                 <h2 style={{ fontSize: '24px', color: '#25D366', margin: '8px 0' }}>RD$ {(metricasActuales.gananciaNeta || 0).toLocaleString()}</h2>
@@ -258,70 +261,96 @@ export default function MetricasAdmin() {
                 </span>
               </div>
 
-              {/* Pago a Técnico (Instalaciones) - ENLACE AL DESGLOSE */}
+              {/* Pago a Técnico */}
               <Link href={`/admin/desglose-tecnico?mes=${mesSeleccionado}`} style={{ textDecoration: 'none' }}>
                 <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '18px', cursor: 'pointer', height: '100%' }}>
                   <span style={{ fontSize: '11px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>🔧 Por Pagar a Técnico</span>
                   <h2 style={{ fontSize: '24px', color: '#FFB800', margin: '8px 0' }}>RD$ {(metricasActuales.totalInstalaciones || 0).toLocaleString()}</h2>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total instalaciones del mes ↗ (Ver Desglose)</p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total instalaciones del mes ↗ (Ver Recibo)</p>
                 </div>
               </Link>
 
-              {/* Pago a Transportista (Envíos) - ENLACE AL DESGLOSE */}
+              {/* Pago a Transportista */}
               <Link href={`/admin/desglose-transportista?mes=${mesSeleccionado}`} style={{ textDecoration: 'none' }}>
                 <div style={{ backgroundColor: '#141414', border: '1px solid #3182CE', borderRadius: '10px', padding: '18px', cursor: 'pointer', height: '100%' }}>
                   <span style={{ fontSize: '11px', color: '#3182CE', textTransform: 'uppercase', fontWeight: 'bold' }}>🚚 Por Pagar a Transportista</span>
                   <h2 style={{ fontSize: '24px', color: '#3182CE', margin: '8px 0' }}>RD$ {(metricasActuales.totalEnvios || 0).toLocaleString()}</h2>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total fletes/envíos del mes ↗ (Ver Desglose)</p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total fletes/envíos del mes ↗ (Ver Recibo)</p>
                 </div>
               </Link>
 
             </div>
 
-            {/* TABLA DE DESGLOSE DE VENTAS BRUTAS (Aparece al hacer clic en "Ver Desglose") */}
+            {/* TABLA DE DESGLOSE INTERACTIVO Y SENCILLO */}
             {mostrarDesgloseVentas && (
               <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '20px', marginBottom: '25px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ marginBottom: '15px' }}>
                   <h4 style={{ margin: 0, fontSize: '16px', color: '#FFB800' }}>
-                    📋 Desglose Individual de Ventas Brutas ({mesSeleccionado})
+                    📋 Auditoría de Ventas Brutas ({mesSeleccionado})
                   </h4>
-                  <span style={{ fontSize: '12px', color: '#888' }}>{pedidosDesglose.length} pedidos en total</span>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#AAA' }}>
+                    Aquí ves exactamente cómo se divide cada peso que pagó el cliente:
+                  </p>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#AAA' }}>
-                      <th style={{ padding: '8px' }}>Fecha</th>
-                      <th style={{ padding: '8px' }}>Orden ID</th>
-                      <th style={{ padding: '8px' }}>Cliente</th>
-                      <th style={{ padding: '8px', textAlign: 'right' }}>Monto Bruto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedidosDesglose.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" style={{ padding: '15px', textAlign: 'center', color: '#888' }}>No hay ventas registradas en este mes.</td>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '600px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#AAA' }}>
+                        <th style={{ padding: '8px' }}>Fecha</th>
+                        <th style={{ padding: '8px' }}>Orden</th>
+                        <th style={{ padding: '8px' }}>Cliente</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFF' }}>📦 Producto</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFB800' }}>🔧 Técnico</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#3182CE' }}>🚚 Envío</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#25D366' }}>💰 Total Recibido</th>
                       </tr>
-                    ) : (
-                      pedidosDesglose.map((item, index) => (
-                        <tr key={index} style={{ borderBottom: '1px solid #222' }}>
-                          <td style={{ padding: '8px' }}>{item.fecha}</td>
-                          <td style={{ padding: '8px', color: '#FFB800' }}>#{item.idOrden}</td>
-                          <td style={{ padding: '8px' }}>{item.cliente}</td>
-                          <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>RD$ {item.monto.toLocaleString()}</td>
+                    </thead>
+                    <tbody>
+                      {pedidosDesglose.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '15px', textAlign: 'center', color: '#888' }}>No hay ventas registradas en este mes.</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid #FFB800', fontWeight: 'bold' }}>
-                      <td colSpan="3" style={{ padding: '12px 8px', textAlign: 'right' }}>SUMA TOTAL VENTAS BRUTAS:</td>
-                      <td style={{ padding: '12px 8px', textAlign: 'right', color: '#FFB800', fontSize: '16px' }}>
-                        RD$ {(metricasActuales.ventasTotales || 0).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                      ) : (
+                        pedidosDesglose.map((item, index) => (
+                          <tr key={index} style={{ borderBottom: '1px solid #222' }}>
+                            <td style={{ padding: '8px' }}>{item.fecha}</td>
+                            <td style={{ padding: '8px', color: '#FFB800' }}>#{item.idOrden}</td>
+                            <td style={{ padding: '8px' }}>{item.cliente}</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>RD$ {item.montoProducto.toLocaleString()}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#FFB800' }}>RD$ {item.montoInstalacion.toLocaleString()}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#3182CE' }}>RD$ {item.montoEnvio.toLocaleString()}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#25D366' }}>RD$ {item.montoTotal.toLocaleString()}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid #FFB800', fontWeight: 'bold', backgroundColor: '#0D0D0D' }}>
+                        <td colSpan="3" style={{ padding: '12px 8px', textAlign: 'right' }}>SUMAS TOTALES:</td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', color: '#FFF' }}>
+                          RD$ {(metricasActuales.ingresoProductos || 0).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', color: '#FFB800' }}>
+                          RD$ {(metricasActuales.totalInstalaciones || 0).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', color: '#3182CE' }}>
+                          RD$ {(metricasActuales.totalEnvios || 0).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', color: '#25D366', fontSize: '15px' }}>
+                          RD$ {(metricasActuales.ventasTotales || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <div style={{ marginTop: '15px', padding: '12px', backgroundColor: '#0D0D0D', borderRadius: '6px', border: '1px solid #222', fontSize: '12px', color: '#888' }}>
+                  📌 <strong style={{ color: '#FFF' }}>Explicación sencilla:</strong> De los <strong style={{ color: '#25D366' }}>RD$ {(metricasActuales.ventasTotales || 0).toLocaleString()}</strong> cobrados en total:
+                  <span style={{ color: '#FFF' }}> RD$ {(metricasActuales.ingresoProductos || 0).toLocaleString()}</span> correspondieron a la venta de mercancía,
+                  <span style={{ color: '#FFB800' }}> RD$ {(metricasActuales.totalInstalaciones || 0).toLocaleString()}</span> son para saldar al instalador y
+                  <span style={{ color: '#3182CE' }}> RD$ {(metricasActuales.totalEnvios || 0).toLocaleString()}</span> corresponden al transportista.
+                </div>
               </div>
             )}
 
@@ -331,16 +360,16 @@ export default function MetricasAdmin() {
               {/* Comparativa Mensual */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#E50914' }}>
-                  📊 Comparativa Contable Mensual
+                  📊 Cálculo de Ganancia Real
                 </h4>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
-                  <span style={{ color: '#AAA' }}>Órdenes Procesadas:</span>
-                  <strong>{metricasActuales.cantidadOrdenes || 0} pedidos</strong>
+                  <span style={{ color: '#AAA' }}>Venta Bruta de Productos:</span>
+                  <span>RD$ {(metricasActuales.ingresoProductos || 0).toLocaleString()}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1F1F1F', fontSize: '13px' }}>
-                  <span style={{ color: '#AAA' }}>Costo Prod. Vendidos (Capital Recuperado):</span>
+                  <span style={{ color: '#AAA' }}>- Costo de Productos (Mercancía):</span>
                   <span style={{ color: '#FF4D4D' }}>RD$ {(metricasActuales.costoProductosVendidos || 0).toLocaleString()}</span>
                 </div>
 
@@ -364,7 +393,7 @@ export default function MetricasAdmin() {
                 </h4>
 
                 <p style={{ fontSize: '12px', color: '#888', margin: '0 0 15px 0' }}>
-                  Valor total del dinero retenido en mercancía en inventario disponible.
+                  Valor total del dinero retenido en mercancía disponible en tu inventario actual.
                 </p>
 
                 <div style={{ backgroundColor: '#0D0D0D', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'center' }}>
