@@ -57,24 +57,20 @@ export default function MetricasAdmin() {
         let costoInstalacionOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
         let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
 
-        // --- EXTRACCIÓN DE INSTALACIÓN POR UNIDAD ---
+        // Extracción de Instalación por Unidad
         if (costoInstalacionOrden === 0 && detalles.toLowerCase().includes('instalación')) {
           Object.keys(mapaProductos).forEach((nombreProd) => {
             if (detalles.includes(nombreProd)) {
               const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
               const match = detalles.match(regex);
               const cant = match ? parseInt(match[1], 10) : 1;
-
-              // Toma el valor configurado o fuerza a 100 por defecto si no existe
               const tarifaProd = mapaProductos[nombreProd].precioInstalacion || 100;
-
               costoInstalacionOrden += (tarifaProd * cant);
-              console.log(`[DEBUG LOG] Producto: "${nombreProd}" | Cantidad: ${cant} | Tarifa por unidad: ${tarifaProd} | Subtotal: ${tarifaProd * cant}`);
             }
           });
         }
 
-        // --- EXTRACCIÓN DE ENVÍO / TRANSPORTISTA ---
+        // Extracción de Envíos
         if (costoEnvioOrden === 0) {
           const textoMin = detalles.toLowerCase();
           if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
@@ -85,14 +81,13 @@ export default function MetricasAdmin() {
         totalInstalaciones += costoInstalacionOrden;
         totalEnvios += costoEnvioOrden;
 
-        // --- COSTO DE PRODUCTOS (CAPITAL RECUPERADO) ---
+        // Costo de Productos
         let costoProdEnOrden = 0;
         Object.keys(mapaProductos).forEach((nombreProd) => {
           if (detalles.includes(nombreProd)) {
             const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
             const match = detalles.match(regex);
             const cant = match ? parseInt(match[1], 10) : 1;
-            
             costoProdEnOrden += (mapaProductos[nombreProd].costo * cant);
           }
         });
@@ -121,7 +116,6 @@ export default function MetricasAdmin() {
   const cargarContabilidad = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Cargar productos para mapa de costos
       const snapProds = await getDocs(collection(db, 'productos'));
       const mapaProductos = {};
       let totalCapitalInventario = 0;
@@ -130,8 +124,6 @@ export default function MetricasAdmin() {
         const p = doc.data();
         const costoUnitario = Number(p.costo ?? (p.precio ? p.precio * 0.5 : 0));
         const stockActual = Number(p.stock ?? 0);
-        
-        // Carga la tarifa de instalación guardada (o 100 si no existe)
         const tarifaInstalacion = Number(p.precioInstalacion ?? p.costoInstalacion ?? p.instalacionPrecio ?? 100);
 
         mapaProductos[p.nombre] = {
@@ -145,12 +137,10 @@ export default function MetricasAdmin() {
 
       setCapitalInvertidoTotal(totalCapitalInventario);
 
-      // 2. Cargar todos los pedidos
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
       const pedidos = [];
       snapPedidos.forEach((doc) => pedidos.push({ id: doc.id, ...doc.data() }));
 
-      // 3. Determinar Mes Anterior
       const [yearStr, monthStr] = mesSeleccionado.split('-');
       const fechaSel = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1);
       
@@ -158,7 +148,6 @@ export default function MetricasAdmin() {
       fechaAnt.setMonth(fechaAnt.getMonth() - 1);
       const mesAnteriorStr = `${fechaAnt.getFullYear()}-${String(fechaAnt.getMonth() + 1).padStart(2, '0')}`;
 
-      // 4. Calcular métricas
       const actual = calcularTotalesPorMes(pedidos, mesSeleccionado, mapaProductos);
       const anterior = calcularTotalesPorMes(pedidos, mesAnteriorStr, mapaProductos);
 
@@ -239,19 +228,23 @@ export default function MetricasAdmin() {
                 </span>
               </div>
 
-              {/* Pago a Técnico (Instalaciones) */}
-              <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '18px' }}>
-                <span style={{ fontSize: '11px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>🔧 Por Pagar a Técnico</span>
-                <h2 style={{ fontSize: '24px', color: '#FFB800', margin: '8px 0' }}>RD$ {(metricasActuales.totalInstalaciones || 0).toLocaleString()}</h2>
-                <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total en instalaciones del mes</p>
-              </div>
+              {/* Pago a Técnico (Instalaciones) - ENLACE AL DESGLOSE */}
+              <Link href={`/admin/desglose-tecnico?mes=${mesSeleccionado}`} style={{ textDecoration: 'none' }}>
+                <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '18px', cursor: 'pointer', height: '100%' }}>
+                  <span style={{ fontSize: '11px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>🔧 Por Pagar a Técnico</span>
+                  <h2 style={{ fontSize: '24px', color: '#FFB800', margin: '8px 0' }}>RD$ {(metricasActuales.totalInstalaciones || 0).toLocaleString()}</h2>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total instalaciones del mes ↗ (Ver Desglose)</p>
+                </div>
+              </Link>
 
-              {/* Pago a Transportista (Envíos) */}
-              <div style={{ backgroundColor: '#141414', border: '1px solid #3182CE', borderRadius: '10px', padding: '18px' }}>
-                <span style={{ fontSize: '11px', color: '#3182CE', textTransform: 'uppercase', fontWeight: 'bold' }}>🚚 Por Pagar a Transportista</span>
-                <h2 style={{ fontSize: '24px', color: '#3182CE', margin: '8px 0' }}>RD$ {(metricasActuales.totalEnvios || 0).toLocaleString()}</h2>
-                <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total en fletes/envíos del mes</p>
-              </div>
+              {/* Pago a Transportista (Envíos) - ENLACE AL DESGLOSE */}
+              <Link href={`/admin/desglose-transportista?mes=${mesSeleccionado}`} style={{ textDecoration: 'none' }}>
+                <div style={{ backgroundColor: '#141414', border: '1px solid #3182CE', borderRadius: '10px', padding: '18px', cursor: 'pointer', height: '100%' }}>
+                  <span style={{ fontSize: '11px', color: '#3182CE', textTransform: 'uppercase', fontWeight: 'bold' }}>🚚 Por Pagar a Transportista</span>
+                  <h2 style={{ fontSize: '24px', color: '#3182CE', margin: '8px 0' }}>RD$ {(metricasActuales.totalEnvios || 0).toLocaleString()}</h2>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Total fletes/envíos del mes ↗ (Ver Desglose)</p>
+                </div>
+              </Link>
 
             </div>
 
