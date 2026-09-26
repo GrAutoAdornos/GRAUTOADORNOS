@@ -13,18 +13,28 @@ export default function Home() {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  
+  const [toastMsg, setToastMsg] = useState('');
+
   // Formulario Checkout
+  const [zonaEnvio, setZonaEnvio] = useState('sdn');
   const [cliente, setCliente] = useState({
     nombre: '',
     telefono: '',
     email: '',
     direccion: '',
-    metodoPago: 'Transferencia Bancaria',
-    requiereInstalacion: false,
+    metodoPago: 'Pago Contra Entrega',
     fechaCita: '',
     horaCita: ''
   });
+
+  // Tarifas de Envío por Zonas
+  const tarifasEnvio = {
+    sdn: { nombre: 'Santo Domingo Norte', costo: 400 },
+    sdo: { nombre: 'Santo Domingo Oeste', costo: 300 },
+    sde: { nombre: 'Santo Domingo Este', costo: 350 },
+    herrera: { nombre: 'Santo Domingo Oeste (Herrera)', costo: 200 },
+    dn: { nombre: 'Distrito Nacional / Centro', costo: 250 }
+  };
 
   // Control de horarios ocupados
   const [citasOcupadas, setCitasOcupadas] = useState([]);
@@ -50,6 +60,11 @@ export default function Home() {
     }
   };
 
+  const lanzarToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3000);
+  };
+
   // Carrito Handlers
   const addToCart = (prod) => {
     setCart((prevCart) => {
@@ -59,9 +74,17 @@ export default function Home() {
           item.id === prod.id ? { ...item, cantidad: item.cantidad + 1 } : item
         );
       }
-      return [...prevCart, { ...prod, cantidad: 1 }];
+      return [...prevCart, { ...prod, cantidad: 1, incluirInstalacion: false }];
     });
-    setIsCartOpen(true);
+    lanzarToast(`✅ "${prod.nombre}" agregado al carrito`);
+  };
+
+  const toggleInstalacionCart = (id) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, incluirInstalacion: !item.incluirInstalacion } : item
+      )
+    );
   };
 
   const removeFromCart = (id) => {
@@ -82,8 +105,30 @@ export default function Home() {
     );
   };
 
-  const totalCart = cart.reduce((acc, item) => acc + (Number(item.precio) || 0) * item.cantidad, 0);
-  const tieneProductoInstalable = cart.some((item) => item.permiteInstalacion || item.categoria === 'Iluminación' || item.categoria === 'Audio');
+  // CÁLCULOS DE COSTOS
+  const subtotalProductos = cart.reduce((acc, item) => acc + (Number(item.precio) || 0) * item.cantidad, 0);
+  const subtotalInstalaciones = cart.reduce((acc, item) => {
+    if (item.incluirInstalacion && (item.requiereInstalacion || item.costoInstalacion)) {
+      return acc + (Number(item.costoInstalacion || 0) * item.cantidad);
+    }
+    return acc;
+  }, 0);
+
+  const tieneInstalacionSeleccionada = cart.some((item) => item.incluirInstalacion);
+  const costoEnvio = tieneInstalacionSeleccionada ? 0 : tarifasEnvio[zonaEnvio].costo;
+  const totalCart = subtotalProductos + subtotalInstalaciones + costoEnvio;
+
+  // Evaluar reserva del 30% por fecha (2 semanas o más) o transferencia
+  const esCitaMasDeDosSemanas = () => {
+    if (!cliente.fechaCita) return false;
+    const hoy = new Date();
+    const fechaElegida = new Date(cliente.fechaCita + 'T00:00:00');
+    const diferenciaDias = (fechaElegida - hoy) / (1000 * 3600 * 24);
+    return diferenciaDias >= 14;
+  };
+
+  const requiereAnticipo30 = esCitaMasDeDosSemanas() || cliente.metodoPago === 'Transferencia Bancaria';
+  const montoAnticipo = requiereAnticipo30 ? (totalCart * 0.30) : 0;
 
   // Filtro de productos por categoría y buscador
   const productosFiltrados = productos.filter((p) => {
@@ -101,14 +146,12 @@ export default function Home() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Debe ser Sábado (day 6)
     if (selectedDate.getDay() !== 6) {
       alert("Las instalaciones a domicilio solo se realizan los días sábados.");
       setCliente((prev) => ({ ...prev, fechaCita: '', horaCita: '' }));
       return;
     }
 
-    // Debe ser a partir del próximo sábado (mínimo 7 días)
     const diffTime = selectedDate - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (diffDays < 7) {
@@ -139,18 +182,17 @@ export default function Home() {
   const handleFinalizarPedido = async (e) => {
     e.preventDefault();
     if (cart.length === 0) return alert("Tu carrito está vacío.");
-    if (cliente.requiereInstalacion && (!cliente.fechaCita || !cliente.horaCita)) {
+    if (tieneInstalacionSeleccionada && (!cliente.fechaCita || !cliente.horaCita)) {
       return alert("Por favor selecciona la fecha y hora disponible para tu cita de instalación.");
     }
 
     setEnviando(true);
     const orderId = 'GR-' + Math.floor(100000 + Math.random() * 900000);
-    const cartSummary = cart.map((i) => `${i.nombre} (x${i.cantidad})`).join(', ');
+    const cartSummary = cart.map((i) => `${i.nombre} (x${i.cantidad})${i.incluirInstalacion ? ' [Con Instalación]' : ''}`).join(', ');
 
-    // Bloques HTML dinámicos para la plantilla de EmailJS
-    const bloqueCitaHTML = cliente.requiereInstalacion
+    const bloqueCitaHTML = tieneInstalacionSeleccionada
       ? `<div style="background-color: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e63946;">
-          <h3 style="color: #ffffff; margin-top: 0; font-size: 15px;">📅 CITA DE INSTALACIÓN A DOMICILIO</h3>
+          <h3 style="color: #ffffff; margin-top: 0; font-size: 15px;"> CITA DE INSTALACIÓN A DOMICILIO</h3>
           <p style="margin: 4px 0; color: #dddddd; font-size: 14px;"><strong>Fecha:</strong> ${cliente.fechaCita}</p>
           <p style="margin: 4px 0; color: #dddddd; font-size: 14px;"><strong>Hora:</strong> ${cliente.horaCita}</p>
          </div>`
@@ -158,12 +200,12 @@ export default function Home() {
 
     const bloqueBancosHTML = `
       <div style="background-color: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e63946;">
-        <h3 style="color: #ffffff; margin-top: 0; font-size: 15px;">💳 CUENTAS BANCARIAS PARA TRANSFERENCIA / RESERVA ($150 USD)</h3>
+        <h3 style="color: #ffffff; margin-top: 0; font-size: 15px;"> CUENTAS BANCARIAS PARA TRANSFERENCIA / RESERVA (30%)</h3>
         <p style="margin: 4px 0; font-size: 13px; color: #cccccc;">• <strong>Banco Popular DOP:</strong> Cta. Ahorros N° 814423729</p>
         <p style="margin: 4px 0; font-size: 13px; color: #cccccc;">• <strong>Banreservas DOP:</strong> Cta. Corriente N° 9605170252</p>
         <p style="margin: 4px 0; font-size: 13px; color: #cccccc;">• <strong>BHD DOP:</strong> Cta. Corriente N° 39485910015</p>
         <p style="margin: 4px 0; font-size: 13px; color: #cccccc;">• <strong>Zelle USD:</strong> Landra2916@gmail.com</p>
-        <p style="margin: 8px 0 0; font-size: 12px; color: #aaaaaa;">* Titular: Landra Guzman, Freddy Rodriguez. Favor enviar el comprobante vía WhatsApp.</p>
+        <p style="margin: 8px 0 0; font-size: 12px; color: #aaaaaa;">* Titular: Landra Guzman, Freddy Rodriguez.</p>
       </div>`;
 
     const pedidoData = {
@@ -172,12 +214,18 @@ export default function Home() {
       clienteTelefono: cliente.telefono,
       clienteEmail: cliente.email,
       direccion: cliente.direccion,
+      zonaEnvio: tarifasEnvio[zonaEnvio].nombre,
+      costoEnvio: costoEnvio,
+      subtotalProductos,
+      subtotalInstalaciones,
+      total: totalCart,
       metodoPago: cliente.metodoPago,
       detalles: cartSummary,
-      total: totalCart,
-      requiereInstalacion: cliente.requiereInstalacion,
+      requiereInstalacion: tieneInstalacionSeleccionada,
       fechaCita: cliente.fechaCita || null,
       horaCita: cliente.horaCita || null,
+      requiereAnticipo: requiereAnticipo30,
+      montoAnticipo: montoAnticipo,
       estado: 'Pendiente',
       fechaCreacion: new Date().toISOString()
     };
@@ -186,7 +234,7 @@ export default function Home() {
       // 1. Guardar pedido en Firestore
       await addDoc(collection(db, 'pedidos'), pedidoData);
 
-      // 2. Enviar correo usando EmailJS vía API REST
+      // 2. Enviar correo usando EmailJS
       const emailPayload = {
         service_id: 'service_jfx0g2e',
         template_id: 'template_mhdgbsw',
@@ -197,7 +245,7 @@ export default function Home() {
           cart_summary: cartSummary,
           total_price: `RD$ ${totalCart}`,
           metodo_pago: cliente.metodoPago,
-          direccion: cliente.direccion,
+          direccion: `${cliente.direccion} (${tarifasEnvio[zonaEnvio].nombre})`,
           bloque_cita: bloqueCitaHTML,
           bloque_bancos: bloqueBancosHTML,
           to_email: cliente.email
@@ -210,11 +258,15 @@ export default function Home() {
         body: JSON.stringify(emailPayload)
       });
 
-      // 3. Redirigir a WhatsApp
-      const mensajeWA = `Hola GR Auto Adornos, realicé el Pedido #${orderId}%0A%0A*Cliente:* ${cliente.nombre}%0A*Total:* RD$ ${totalCart}%0A*Dirección:* ${cliente.direccion}${cliente.requiereInstalacion ? `%0A*Cita Instalación:* ${cliente.fechaCita} a las${cliente.horaCita}` : ''}`;
-      window.open(`https://wa.me/18494040514?text=${mensajeWA}`, '_blank');
+      // 3. Confirmación según método de pago
+      if (cliente.metodoPago === 'Pago Contra Entrega' && !requiereAnticipo30) {
+        alert(`¡Pedido #${orderId} realizado con éxito! Te hemos enviado la confirmación a tu correo.`);
+      } else {
+        const mensajeWA = `Hola GR Auto Adornos, realicé el Pedido #${orderId}%0A%0A*Cliente:* ${cliente.nombre}%0A*Total:* RD$ ${totalCart}%0A*Anticipo (30%):* RD$ ${montoAnticipo.toFixed(2)}%0A*Dirección:* ${cliente.direccion}`;
+        window.open(`https://wa.me/18494040514?text=${mensajeWA}`, '_blank');
+        alert(`Pedido #${orderId} registrado. Recuerda realizar el pago del 30% (RD$ ${montoAnticipo.toFixed(2)}) en menos de 12 horas.`);
+      }
 
-      alert("¡Pedido realizado con éxito! Te hemos enviado un correo con los detalles.");
       setCart([]);
       setIsCheckoutOpen(false);
       setIsCartOpen(false);
@@ -223,8 +275,7 @@ export default function Home() {
         telefono: '',
         email: '',
         direccion: '',
-        metodoPago: 'Transferencia Bancaria',
-        requiereInstalacion: false,
+        metodoPago: 'Pago Contra Entrega',
         fechaCita: '',
         horaCita: ''
       });
@@ -239,6 +290,13 @@ export default function Home() {
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
+      {/* Toast Notificación */}
+      {toastMsg && (
+        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#25D366', color: '#000', padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+          {toastMsg}
+        </div>
+      )}
+
       {/* Header / Navbar */}
       <header style={{ backgroundColor: '#000000', borderBottom: '2px solid #E50914', padding: '15px 20px', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -255,12 +313,11 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Botón Carrito */}
           <button 
             onClick={() => setIsCartOpen(true)}
             style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            🛒 Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
+             Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
           </button>
         </div>
       </header>
@@ -283,18 +340,16 @@ export default function Home() {
       {/* Buscador y Filtros */}
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '30px 20px' }}>
         
-        {/* Barra de Búsqueda */}
         <div style={{ marginBottom: '20px', textAlign: 'center' }}>
           <input
             type="text"
-            placeholder="🔍 Buscar producto (ej. cámara trasera, pantalla, radio)..."
+            placeholder=" Buscar producto (ej. cámara trasera, pantalla, radio)..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{ width: '100%', maxWidth: '500px', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
           />
         </div>
 
-        {/* Categorías */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '30px' }}>
           {['Todos', 'Accesorios', 'Iluminación', 'Audio', 'Pantallas & Cámaras', 'Tintados'].map((cat) => (
             <button
@@ -326,7 +381,15 @@ export default function Home() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
             {productosFiltrados.map((prod) => (
-              <div key={prod.id} style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div key={prod.id} style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
+                
+                {/* ETIQUETA / BADGE SI LLEVA INSTALACION */}
+                {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
+                  <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', zIndex: 2 }}>
+                    🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
+                  </span>
+                )}
+
                 <div>
                   <img 
                     src={prod.imagenUrl} 
@@ -357,32 +420,51 @@ export default function Home() {
         )}
       </main>
 
-      {/* Modal Carrito Lateral */}
+      {/* Modal Carrito Adaptable */}
       {isCartOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 50, display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ backgroundColor: '#141414', width: '100%', maxWidth: '400px', height: '100%', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 50, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#141414', width: '100%', maxWidth: '450px', maxHeight: '85vh', borderRadius: '12px', border: '1px solid #333', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
+            
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF' }}>Tu Carrito de Compras</h2>
-                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF', margin: 0 }}>Tu Carrito de Compras</h2>
+                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✖</button>
               </div>
 
               {cart.length === 0 ? (
                 <p style={{ color: '#888', textAlign: 'center', marginTop: '40px', fontSize: '13px' }}>El carrito está vacío.</p>
               ) : (
-                <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '15px', maxHeight: '60vh', overflowY: 'auto' }}>
+                <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {cart.map((item) => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1F1F1F', padding: '10px', borderRadius: '8px' }}>
-                      <div>
-                        <h4 style={{ fontSize: '13px', margin: '0', color: '#FFF' }}>{item.nombre}</h4>
-                        <p style={{ fontSize: '12px', color: '#E50914', margin: '2px 0 0', fontWeight: 'bold' }}>RD$ {item.precio}</p>
+                    <div key={item.id} style={{ backgroundColor: '#1F1F1F', padding: '12px', borderRadius: '8px', border: '1px solid #2A2A2A' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h4 style={{ fontSize: '13px', margin: '0', color: '#FFF' }}>{item.nombre}</h4>
+                          <p style={{ fontSize: '12px', color: '#E50914', margin: '2px 0 0', fontWeight: 'bold' }}>RD$ {item.precio}</p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button onClick={() => updateCantidad(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
+                          <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{item.cantidad}</span>
+                          <button onClick={() => updateCantidad(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
+                          <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>🗑</button>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button onClick={() => updateCantidad(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
-                        <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{item.cantidad}</span>
-                        <button onClick={() => updateCantidad(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
-                        <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>🗑</button>
-                      </div>
+
+                      {/* SELECCIONAR INSTALACION EN EL CARRITO */}
+                      {(item.requiereInstalacion || item.costoInstalacion > 0) && (
+                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input 
+                            type="checkbox" 
+                            id={`inst-${item.id}`} 
+                            checked={item.incluirInstalacion} 
+                            onChange={() => toggleInstalacionCart(item.id)} 
+                            style={{ accentColor: '#E50914', cursor: 'pointer' }}
+                          />
+                          <label htmlFor={`inst-${item.id}`} style={{ fontSize: '11px', color: '#FFB800', cursor: 'pointer', fontWeight: 'bold' }}>
+                            Añadir Instalación (+RD$ {item.costoInstalacion || 0} c/u)
+                          </label>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -390,10 +472,10 @@ export default function Home() {
             </div>
 
             {cart.length > 0 && (
-              <div style={{ borderTop: '1px solid #333', paddingTop: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>
-                  <span>Total:</span>
-                  <span style={{ color: '#E50914' }}>RD$ {totalCart}</span>
+              <div style={{ borderTop: '1px solid #333', paddingTop: '15px', marginTop: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '10px' }}>
+                  <span>Subtotal:</span>
+                  <span style={{ color: '#FFF', fontWeight: 'bold' }}>RD$ {subtotalProductos + subtotalInstalaciones}</span>
                 </div>
                 <button
                   onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
@@ -410,8 +492,8 @@ export default function Home() {
       {/* Modal Checkout */}
       {isCheckoutOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 50, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '25px', position: 'relative' }}>
-            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+          <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '25px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✖</button>
 
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#E50914', marginBottom: '15px' }}>Completar Pedido</h2>
 
@@ -437,92 +519,139 @@ export default function Home() {
                 <input required type="text" value={cliente.direccion} onChange={(e) => setCliente({ ...cliente, direccion: e.target.value })} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }} />
               </div>
 
-              {/* Opción de Cita de Instalación a Domicilio */}
-              {tieneProductoInstalable && (
+              {/* SELECCIÓN DE ZONA Y COSTO DE ENVÍO */}
+              <div>
+                <label style={{ fontSize: '12px', color: '#AAA' }}>Zona de Entrega / Municipio *</label>
+                <select value={zonaEnvio} onChange={(e) => setZonaEnvio(e.target.value)} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>
+                  <option value="sdn">Santo Domingo Norte - RD$ 400</option>
+                  <option value="sdo">Santo Domingo Oeste - RD$ 300</option>
+                  <option value="sde">Santo Domingo Este - RD$ 350</option>
+                  <option value="herrera">Santo Domingo Oeste (Herrera) - RD$ 200</option>
+                  <option value="dn">Distrito Nacional / Centro - RD$ 250</option>
+                </select>
+              </div>
+
+              {/* MÉTODO DE PAGO */}
+              <div>
+                <label style={{ fontSize: '12px', color: '#AAA' }}>Método de Pago *</label>
+                <select value={cliente.metodoPago} onChange={(e) => setCliente({ ...cliente, metodoPago: e.target.value })} style={{ width: '100%', backgroundColor: '#181818', border: '1px solid #333', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>
+                  <option value="Pago Contra Entrega">Pago Contra Entrega</option>
+                  <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                </select>
+              </div>
+
+              {/* Cita de Instalación (Si seleccionó alguna instalación) */}
+              {tieneInstalacionSeleccionada && (
                 <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #333', padding: '12px', borderRadius: '8px', marginTop: '5px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#FFF', fontWeight: 'bold' }}>
-                    <input type="checkbox" checked={cliente.requiereInstalacion} onChange={(e) => setCliente({ ...cliente, requiereInstalacion: e.target.checked })} />
-                    ¿Deseas servicio de instalación a domicilio?
-                  </label>
-
-                  {cliente.requiereInstalacion && (
-                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <p style={{ fontSize: '11px', color: '#ff4d4d', margin: '0' }}>* Instalaciones exclusivamente los sábados (A partir de la próxima semana).</p>
-                      
-                      <div>
-                        <label style={{ fontSize: '11px', color: '#AAA' }}>Seleccionar Sábado *</label>
-                        <input type="date" value={cliente.fechaCita} onChange={handleFechaChange} style={{ width: '100%', backgroundColor: '#000', border: '1px solid #444', color: '#FFF', padding: '8px', borderRadius: '6px', fontSize: '12px' }} />
-                      </div>
-
-                      {cliente.fechaCita && (
-                        <div>
-                          <label style={{ fontSize: '11px', color: '#AAA' }}>Horario Disponible *</label>
-                          {loadingCitas ? (
-                            <p style={{ fontSize: '11px', color: '#888' }}>Consultando agenda...</p>
-                          ) : (
-                            <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
-                              <button
-                                type="button"
-                                disabled={citasOcupadas.includes('1:00 PM')}
-                                onClick={() => setCliente({ ...cliente, horaCita: '1:00 PM' })}
-                                style={{
-                                  flex: 1,
-                                  backgroundColor: citasOcupadas.includes('1:00 PM') ? '#333' : cliente.horaCita === '1:00 PM' ? '#E50914' : '#222',
-                                  color: citasOcupadas.includes('1:00 PM') ? '#666' : '#FFF',
-                                  border: '1px solid #444',
-                                  padding: '8px',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  cursor: citasOcupadas.includes('1:00 PM') ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                {citasOcupadas.includes('1:00 PM') ? '1:00 PM (Ocupado)' : '1:00 PM'}
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={citasOcupadas.includes('4:00 PM')}
-                                onClick={() => setCliente({ ...cliente, horaCita: '4:00 PM' })}
-                                style={{
-                                  flex: 1,
-                                  backgroundColor: citasOcupadas.includes('4:00 PM') ? '#333' : cliente.horaCita === '4:00 PM' ? '#E50914' : '#222',
-                                  color: citasOcupadas.includes('4:00 PM') ? '#666' : '#FFF',
-                                  border: '1px solid #444',
-                                  padding: '8px',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  cursor: citasOcupadas.includes('4:00 PM') ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                {citasOcupadas.includes('4:00 PM') ? '4:00 PM (Ocupado)' : '4:00 PM'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                  <h4 style={{ fontSize: '13px', color: '#FFB800', margin: '0 0 8px' }}>🔧 Agenda tu cita de instalación:</h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <p style={{ fontSize: '11px', color: '#ff4d4d', margin: '0' }}>* Instalaciones exclusivamente los sábados.</p>
+                    
+                    <div>
+                      <label style={{ fontSize: '11px', color: '#AAA' }}>Seleccionar Sábado *</label>
+                      <input type="date" value={cliente.fechaCita} onChange={handleFechaChange} style={{ width: '100%', backgroundColor: '#000', border: '1px solid #444', color: '#FFF', padding: '8px', borderRadius: '6px', fontSize: '12px' }} />
                     </div>
-                  )}
+
+                    {cliente.fechaCita && (
+                      <div>
+                        <label style={{ fontSize: '11px', color: '#AAA' }}>Horario Disponible *</label>
+                        {loadingCitas ? (
+                          <p style={{ fontSize: '11px', color: '#888' }}>Consultando agenda...</p>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
+                            <button
+                              type="button"
+                              disabled={citasOcupadas.includes('1:00 PM')}
+                              onClick={() => setCliente({ ...cliente, horaCita: '1:00 PM' })}
+                              style={{
+                                flex: 1,
+                                backgroundColor: citasOcupadas.includes('1:00 PM') ? '#333' : cliente.horaCita === '1:00 PM' ? '#E50914' : '#222',
+                                color: citasOcupadas.includes('1:00 PM') ? '#666' : '#FFF',
+                                border: '1px solid #444',
+                                padding: '8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                cursor: citasOcupadas.includes('1:00 PM') ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {citasOcupadas.includes('1:00 PM') ? '1:00 PM (Ocupado)' : '1:00 PM'}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={citasOcupadas.includes('4:00 PM')}
+                              onClick={() => setCliente({ ...cliente, horaCita: '4:00 PM' })}
+                              style={{
+                                flex: 1,
+                                backgroundColor: citasOcupadas.includes('4:00 PM') ? '#333' : cliente.horaCita === '4:00 PM' ? '#E50914' : '#222',
+                                color: citasOcupadas.includes('4:00 PM') ? '#666' : '#FFF',
+                                border: '1px solid #444',
+                                padding: '8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                cursor: citasOcupadas.includes('4:00 PM') ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {citasOcupadas.includes('4:00 PM') ? '4:00 PM (Ocupado)' : '4:00 PM'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
+              {/* RESUMEN DETALLADO Y REGLAS DE RESERVA */}
+              <div style={{ backgroundColor: '#181818', padding: '12px', borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Productos:</span>
+                  <span>RD$ {subtotalProductos}</span>
+                </div>
+                {subtotalInstalaciones > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#FFB800' }}>
+                    <span>Servicios Instalación:</span>
+                    <span>+RD$ {subtotalInstalaciones}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Envío ({tarifasEnvio[zonaEnvio].nombre}):</span>
+                  <span style={{ color: tieneInstalacionSeleccionada ? '#25D366' : '#FFF' }}>
+                    {tieneInstalacionSeleccionada ? '¡GRATIS! (Por Instalación)' : `RD$ ${costoEnvio}`}
+                  </span>
+                </div>
+                <hr style={{ borderColor: '#333', margin: '4px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '14px' }}>
+                  <span>TOTAL A PAGAR:</span>
+                  <span style={{ color: '#25D366' }}>RD$ {totalCart}</span>
+                </div>
+
+                {/* ADVERTENCIA DE RESERVA DEL 30% */}
+                {requiereAnticipo30 && (
+                  <div style={{ backgroundColor: '#2A1800', border: '1px solid #FFB800', padding: '10px', borderRadius: '6px', marginTop: '8px', fontSize: '11px', color: '#FFB800' }}>
+                    ⚠️ <b>Reserva requerida (30%):</b> {esCitaMasDeDosSemanas() ? 'Al agendar a 2 semanas o más, ' : ''}se debe realizar el pago del 30% (<b>RD$ {montoAnticipo.toFixed(2)}</b>) vía transferencia dentro de las próximas 12 horas.
+                    <br /><br />
+                    ℹ️ <b>Política de Cancelación:</b> Cancelación gratuita dentro de los 2 días laborables tras realizar el pedido. Transcurrido ese plazo, el 30% no tiene reembolso.
+                  </div>
+                )}
+              </div>
+
               {/* Información Cuentas Bancarias */}
               <div style={{ backgroundColor: '#181818', border: '1px solid #333', padding: '12px', borderRadius: '8px', fontSize: '11px', color: '#CCC' }}>
-                <p style={{ fontWeight: 'bold', color: '#FFF', margin: '0 0 5px' }}>CUENTAS BANCARIAS PARA TRANSFERENCIA / RESERVA ($150 USD):</p>
+                <p style={{ fontWeight: 'bold', color: '#FFF', margin: '0 0 5px' }}>CUENTAS BANCARIAS PARA TRANSFERENCIA / RESERVA:</p>
                 <p style={{ margin: '2px 0' }}>• Banco Popular DOP: Cta. Ahorros N° 814423729</p>
                 <p style={{ margin: '2px 0' }}>• Banreservas DOP: Cta. Corriente N° 9605170252</p>
                 <p style={{ margin: '2px 0' }}>• BHD DOP: Cta. Corriente N° 39485910015</p>
                 <p style={{ margin: '2px 0' }}>• Zelle USD: Landra2916@gmail.com</p>
-                <p style={{ margin: '5px 0 0', color: '#AAA' }}>* Titular: Landra Guzman, Freddy Rodriguez. Enviar comprobante vía WhatsApp.</p>
+                <p style={{ margin: '5px 0 0', color: '#AAA' }}>* Titular: Landra Guzman, Freddy Rodriguez.</p>
               </div>
 
               <button
                 type="submit"
                 disabled={enviando}
-                style={{ backgroundColor: '#25D366', color: '#FFF', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', marginTop: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFFFFF">
-                  <path d="M12.031 2c-5.514 0-9.98 4.466-9.98 9.98 0 1.76.459 3.479 1.33 4.996L2 22l5.141-1.348c1.465.799 3.12 1.22 4.89 1.22 5.514 0 9.98-4.466 9.98-9.98 0-5.514-4.466-9.98-9.98-9.98zm0 18.254c-1.57 0-3.111-.421-4.46-1.218l-.32-.189-3.315.869.885-3.232-.209-.333c-.878-1.399-1.341-3.023-1.341-4.691 0-4.708 3.83-8.538 8.538-8.538 4.708 0 8.538 3.83 8.538 8.538 0 4.708-3.83 8.538-8.538 8.538z"/>
-                </svg>
                 {enviando ? 'Procesando Orden...' : 'Confirmar y Enviar Pedido'}
               </button>
             </form>
@@ -530,15 +659,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Botones Flotantes Oficiales de Contacto (WhatsApp, Instagram) */}
+      {/* Botones Flotantes Oficiales de Contacto */}
       <div style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 40 }}>
-        
-        {/* Ícono Oficial de WhatsApp */}
         <a
           href="https://wa.me/18494040514"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ backgroundColor: '#25D366', color: '#FFF', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', transition: 'transform 0.2s' }}
+          style={{ backgroundColor: '#25D366', color: '#FFF', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
           title="Contactar por WhatsApp"
         >
           <svg width="28" height="28" viewBox="0 0 24 24" fill="#FFFFFF">
@@ -546,24 +673,22 @@ export default function Home() {
           </svg>
         </a>
 
-        {/* Ícono Oficial de Instagram */}
         <a
           href="https://www.instagram.com/gr.autoadorno/"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%,#d6249f 60%,#285AEB 90%)', color: '#FFF', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', transition: 'transform 0.2s' }}
+          style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%,#d6249f 60%,#285AEB 90%)', color: '#FFF', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
           title="Instagram"
         >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="#FFFFFF">
             <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
           </svg>
         </a>
-
       </div>
 
       {/* Footer */}
       <footer style={{ backgroundColor: '#000000', borderTop: '1px solid #222', padding: '25px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
-        <p style={{ margin: '0 0 5px' }}>📍 Correo: <a href="mailto:grautoadornos@gmail.com" style={{ color: '#AAA', textDecoration: 'none' }}>grautoadornos@gmail.com</a> | WhatsApp: 849-404-0514</p>
+        <p style={{ margin: '0 0 5px' }}> Correo: <a href="mailto:grautoadornos@gmail.com" style={{ color: '#AAA', textDecoration: 'none' }}>grautoadornos@gmail.com</a> | WhatsApp: 849-404-0514</p>
         <p style={{ margin: 0 }}>© 2026 GR Auto Adornos. Todos los derechos reservados.</p>
       </footer>
     </div>
