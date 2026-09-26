@@ -10,6 +10,7 @@ export default function ClientesAdmin() {
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState('TODOS'); // 'TODOS', 'PENDIENTES', 'CONTACTADOS'
+  const [busqueda, setBusqueda] = useState(''); // <-- NUEVO ESTADO PARA BÚSQUEDA RÁPIDA
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function ClientesAdmin() {
 
         mapaClientes[claveUnica].totalInvertido += totalPedido;
 
-        // Mantiene el estado de contactado si alguna orden previa fue marcada
         if (contactado) mapaClientes[claveUnica].contactado = true;
 
         mapaClientes[claveUnica].historialCompras.push({
@@ -64,7 +64,6 @@ export default function ClientesAdmin() {
         });
       });
 
-      // Convertir objeto a arreglo
       const listaFinal = Object.values(mapaClientes);
       setClientes(listaFinal);
     } catch (error) {
@@ -82,14 +81,12 @@ export default function ClientesAdmin() {
         await updateDoc(refPedido, { fidelizacionContactado: true });
       }
 
-      // Actualizar estado local
       setClientes((prev) =>
         prev.map((c) =>
           c.telefono === cliente.telefono ? { ...c, contactado: true } : c
         )
       );
 
-      // Limpiar teléfono para el enlace de WhatsApp
       const telLimpio = String(cliente.telefono).replace(/\D/g, '');
       const mensaje = `Hola ${cliente.nombre}, ¡saludos de GR Auto Adornos! 🚗✨ Queríamos saber cómo te va con tus productos y si necesitas algún accesorio o servicio adicional. ¡Estamos a tu orden!`;
       const urlWhatsapp = `https://wa.me/1${telLimpio}?text=${encodeURIComponent(mensaje)}`;
@@ -100,11 +97,21 @@ export default function ClientesAdmin() {
     }
   };
 
-  // Filtrado de la lista
+  // FILTRADO INTELIGENTE (Por Estado + Búsqueda por Nombre o Teléfono)
   const clientesFiltrados = clientes.filter((c) => {
-    if (filtroEstado === 'PENDIENTES') return !c.contactado;
-    if (filtroEstado === 'CONTACTADOS') return c.contactado;
-    return true;
+    // 1. Filtro por estado
+    let cumpleEstado = true;
+    if (filtroEstado === 'PENDIENTES') cumpleEstado = !c.contactado;
+    if (filtroEstado === 'CONTACTADOS') cumpleEstado = c.contactado;
+
+    // 2. Filtro por barra de búsqueda (Nombre o Teléfono)
+    const textoBusqueda = busqueda.toLowerCase().trim();
+    const cumpleBusqueda =
+      !textoBusqueda ||
+      c.nombre.toLowerCase().includes(textoBusqueda) ||
+      c.telefono.toLowerCase().includes(textoBusqueda);
+
+    return cumpleEstado && cumpleBusqueda;
   });
 
   return (
@@ -112,7 +119,7 @@ export default function ClientesAdmin() {
       <header style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '18px', fontWeight: '900' }}>
-            GR <span style={{ color: '#E50914' }}>CRM & FIDELIZACIÓN</span>
+            GR <span style={{ color: '#E50914' }}>CRM & BÚSQUEDA RÁPIDA</span>
           </span>
           <Link href="/admin/dashboard" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>
             Volver al Panel
@@ -121,13 +128,33 @@ export default function ClientesAdmin() {
       </header>
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '25px 20px' }}>
-        <h2 style={{ fontSize: '22px', marginBottom: '10px' }}>Base de Clientes & Seguimiento</h2>
+        <h2 style={{ fontSize: '22px', marginBottom: '10px' }}>Base de Clientes & Búsqueda Rápida</h2>
         <p style={{ color: '#888', fontSize: '13px', marginBottom: '20px' }}>
-          Gestiona tus clientes reincidentes, verifica su historial de compras y marca el seguimiento de fidelización.
+          Busca instantáneamente por nombre o número de teléfono, revisa su historial y gestiona el seguimiento.
         </p>
 
-        {/* BARRA DE FILTROS */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
+        {/* BARRA DE BÚSQUEDA RÁPIDA GLOBAL */}
+        <div style={{ marginBottom: '20px' }}>
+          <input
+            type="text"
+            placeholder="🔍 Buscar cliente por nombre o teléfono (ej: Juan, 809...)"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            style={{
+              width: '100%',
+              backgroundColor: '#141414',
+              color: '#FFF',
+              border: '1px solid #333',
+              padding: '12px 15px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              outline: 'none'
+            }}
+          />
+        </div>
+
+        {/* BARRA DE FILTROS DE ESTADO */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setFiltroEstado('TODOS')}
             style={{
@@ -178,13 +205,13 @@ export default function ClientesAdmin() {
         {loading ? (
           <p style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Cargando clientes y pedidos...</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: clienteSeleccionado ? '1fr 1fr' : '1fr', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: clienteSeleccionado ? '1.2fr 1fr' : '1fr', gap: '20px' }}>
             
             {/* LISTA DE CLIENTES */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {clientesFiltrados.length === 0 ? (
-                <p style={{ color: '#888', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #222' }}>
-                  No se encontraron clientes en esta categoría.
+                <p style={{ color: '#888', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #222', textAlign: 'center' }}>
+                  No se encontraron clientes con esos criterios de búsqueda.
                 </p>
               ) : (
                 clientesFiltrados.map((cliente, index) => (
@@ -196,14 +223,14 @@ export default function ClientesAdmin() {
                       borderRadius: '10px',
                       padding: '16px',
                       display: 'flex',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       flexWrap: 'wrap',
-                      gap: '10px'
+                      gap: '12px'
                     }}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                         <h3 style={{ margin: 0, fontSize: '16px', color: '#FFF' }}>{cliente.nombre}</h3>
                         {cliente.contactado ? (
                           <span style={{ backgroundColor: '#1C3829', color: '#25D366', border: '1px solid #25D366', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
@@ -215,8 +242,8 @@ export default function ClientesAdmin() {
                           </span>
                         )}
                       </div>
-                      <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#AAA' }}>📞 Teléfono: {cliente.telefono}</p>
-                      <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#AAA' }}>📍 Dirección: {cliente.direccion}</p>
+                      <p style={{ margin: '2px 0', fontSize: '12px', color: '#AAA' }}>📞 Teléfono: {cliente.telefono}</p>
+                      <p style={{ margin: '2px 0', fontSize: '12px', color: '#AAA' }}>📍 Dirección: {cliente.direccion}</p>
                       <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#25D366', fontWeight: 'bold' }}>
                         💰 Total Comprado: RD$ {cliente.totalInvertido.toLocaleString()} ({cliente.historialCompras.length} compras)
                       </p>
@@ -251,7 +278,7 @@ export default function ClientesAdmin() {
                           cursor: 'pointer'
                         }}
                       >
-                        {cliente.contactado ? '📲 Enviar de Nuevo' : '📲 Enviar Fidelización (WhatsApp)'}
+                        {cliente.contactado ? '📲 Enviar de Nuevo' : '📲 WhatsApp'}
                       </button>
                     </div>
                   </div>
