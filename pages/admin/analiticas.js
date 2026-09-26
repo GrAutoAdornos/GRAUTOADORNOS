@@ -93,7 +93,7 @@ export default function AnaliticasDashboard() {
     listaPedidos.forEach((p) => {
       const monto = Number(p.total || 0);
 
-      // Procesar fecha del pedido (soporta timestamp de Firebase o campo fecha string/Date)
+      // Procesar fecha del pedido
       let fechaPedido = ahora;
       if (p.fecha?.toDate) {
         fechaPedido = p.fecha.toDate();
@@ -107,34 +107,29 @@ export default function AnaliticasDashboard() {
         cumpleFiltroMes = (fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual);
       } else if (modoFiltro === 'pasado') {
         cumpleFiltroMes = (fechaPedido.getMonth() === mesPasado && fechaPedido.getFullYear() === anioMesPasado);
-      } // Si es 'todos', pasa sin restricciones
+      }
 
       if (cumpleFiltroMes) {
         cuentaPedidosFiltrados++;
 
-        // Si el pedido no está cancelado, suma a las finanzas del filtro
         if (p.estado !== 'Cancelado') {
           tTotal += monto;
 
           const tiempoPedido = fechaPedido.getTime();
 
-          // Diarias (hoy)
           if (tiempoPedido >= inicioHoy) {
             tDiario += monto;
           }
 
-          // Semanales (últimos 7 días)
           if (fechaPedido >= hace7Dias) {
             tSemanal += monto;
           }
 
-          // Mensuales (mes actual fijo para tarjeta comparativa o mes en curso)
           if (fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual) {
             tMensual += monto;
           }
         }
 
-        // Conteo de Productos más vendidos (basado en productosDetalle o campo detalles)
         if (p.productosDetalle && Array.isArray(p.productosDetalle)) {
           p.productosDetalle.forEach((item) => {
             const nombreProd = item.nombre || 'Producto sin nombre';
@@ -142,11 +137,9 @@ export default function AnaliticasDashboard() {
             prodConteo[nombreProd] = (prodConteo[nombreProd] || 0) + cantidad;
           });
         } else if (p.detalles) {
-          // Fallback si viene en texto plano
           prodConteo[p.detalles] = (prodConteo[p.detalles] || 0) + 1;
         }
 
-        // Conteo por Zonas de Envío
         const zona = p.zonaEnvio || p.direccion || 'No especificada';
         zonaConteo[zona] = (zonaConteo[zona] || 0) + Number(p.total || 0);
       }
@@ -158,11 +151,10 @@ export default function AnaliticasDashboard() {
     setVentasMensuales(tMensual);
     setTotalPedidosCount(cuentaPedidosFiltrados);
 
-    // Ordenar productos más vendidos de mayor a menor
     const productosOrdenados = Object.keys(prodConteo)
       .map((nombre) => ({ nombre, cantidad: prodConteo[nombre] }))
       .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(0, 5); // Top 5
+      .slice(0, 5);
     setProductosMasVendidos(productosOrdenados);
 
     setIngresosPorZona(zonaConteo);
@@ -170,7 +162,6 @@ export default function AnaliticasDashboard() {
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '30px 20px', fontFamily: 'sans-serif' }}>
-      {/* Header */}
       <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '25px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#E50914', textTransform: 'uppercase', margin: 0 }}>
@@ -188,7 +179,6 @@ export default function AnaliticasDashboard() {
         </div>
       </div>
 
-      {/* BARRA DE FILTRO DE MES */}
       <div style={{ maxWidth: '1000px', margin: '0 auto 20px auto', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', backgroundColor: '#141414', padding: '12px 15px', borderRadius: '8px', border: '1px solid #222' }}>
         <span style={{ fontSize: '13px', color: '#FFB800', fontWeight: 'bold' }}>📅 Filtrar Periodo:</span>
         <select 
@@ -207,12 +197,9 @@ export default function AnaliticasDashboard() {
           <p style={{ color: '#888', textAlign: 'center', padding: '50px 0' }}>Calculando analíticas financieras...</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
-            
-            {/* TARJETAS DE VENTAS TOTALES */}
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '12px' }}>💰 Resumen de Ventas (RD$)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
-                
                 <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                   <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Ventas de Hoy</span>
                   <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#25D366', margin: '8px 0 0 0' }}>
@@ -243,13 +230,10 @@ export default function AnaliticasDashboard() {
                   </h3>
                   <span style={{ fontSize: '11px', color: '#666' }}>Total de órdenes en filtro: {totalPedidosCount}</span>
                 </div>
-
               </div>
             </div>
 
-            {/* PRODUCTOS MÁS VENDIDOS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-              
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>🔥 Productos con Mayor Rotación</h2>
                 {productosMasVendidos.length === 0 ? (
@@ -271,7 +255,6 @@ export default function AnaliticasDashboard() {
                 )}
               </div>
 
-              {/* INGRESOS POR ZONAS DE ENVÍO */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>📍 Ingresos por Zonas de Envío</h2>
                 {Object.keys(ingresosPorZona).length === 0 ? (
@@ -287,9 +270,7 @@ export default function AnaliticasDashboard() {
                   </div>
                 )}
               </div>
-
             </div>
-
           </div>
         )}
       </div>
