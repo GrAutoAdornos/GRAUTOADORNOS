@@ -240,16 +240,16 @@ export default function Home() {
         template_id: 'template_mhdgbsw',
         user_id: 'gFYWXFr3j_woisLA-',
         template_params: {
-          user_name: cliente.nombre,
-          order_id: orderId,
-          cart_summary: cartSummary,
-          total_price: `RD$ ${totalCart}`,
-          metodo_pago: cliente.metodoPago,
-          direccion: `${cliente.direccion} (${tarifasEnvio[zonaEnvio].nombre})`,
-          bloque_cita: bloqueCitaHTML,
-          bloque_bancos: bloqueBancosHTML,
-          to_email: cliente.email
-        }
+  user_name: cliente.nombre,
+  order_id: orderId,
+  cart_summary: cartSummary,
+  total_price: `RD$ ${totalCart}`,
+  metodo_pago: cliente.metodoPago,
+  direccion: `${cliente.direccion} (${tarifasEnvio[zonaEnvio].nombre})`,
+  bloque_cita: bloqueCitaHTML,
+  bloque_bancos: bloqueBancosHTML,
+  to_email: cliente.email
+} // <-- Asegúrate de cerrar esta llave
       };
 
       await fetch('https://api.emailjs.com/api/v1.0/email/send', {
