@@ -745,10 +745,11 @@ export default function Home() {
         </a>
       </div>
 
-      {/* Footer */}
-      <footer style={{ backgroundColor: '#000000', borderTop: '1px solid #222', padding: '25px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
-        <p style={{ margin: '0 0 5px' }}> Correo: <a href="mailto:grautoadornos@gmail.com" style={{ color: '#AAA', textDecoration: 'none' }}>grautoadornos@gmail.com</a> | WhatsApp: 849-404-0514</p>
+     {/* Footer */}
+      <footer style={{ backgroundColor: '#000000', borderTop: '1px solid #222', padding: '25px', textAlign: 'center', fontSize: '12px' }}>
+        <p style={{ margin: '0 0 5px' }}>Correo: <a href="mailto:grautoadornos@gmail.com" style={{ color: '#AAA', textDecoration: 'none' }}>grautoadornos@gmail.com</a></p>
         <p style={{ margin: 0 }}>© 2026 GR Auto Adornos. Todos los derechos reservados.</p>
-     </footer>
+      </footer>
     </div>
   );
+}
