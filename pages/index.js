@@ -397,84 +397,87 @@ export default function Home() {
         </div>
 
         {/* Listado de Productos */}
-        {loading ? (
-          <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>Cargando accesorios...</div>
-        ) : productosFiltrados.length === 0 ? (
-          <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#888' }}>
-            No se encontraron productos coincidentes.
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
-            {productosFiltrados.map((prod) => {
-              const stock = Number(prod.stock ?? 0);
-              const sinStock = stock <= 0;
-              const pocoStock = stock > 0 && stock <= 2;
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>Cargando accesorios...</div>
+          ) : productosFiltrados.length === 0 ? (
+            <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '12px', padding: '40px', textAlign: 'center' }}>
+              No se encontraron productos coincidentes.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
+              {productosFiltrados.map((prod) => {
+                const stock = Number(prod.stock ?? 0);
+                const sinStock = stock <= 0;
+                const pocoStock = stock > 0 && stock <= 2;
 
-              return (
-                <div key={prod.id} style={{ backgroundColor: '#141414', border: pocoStock ? '1px solid #ff4d4d' : '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
-                  
-                  {/* BADGE DE INSTALACIÓN */}
-                  {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
-                    <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '4px', zIndex: 1 }}>
-                      🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
-                    </span>
-                  )}
-
-                  <div>
-                    <img src={prod.imagenUrl} alt={prod.nombre} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+                return (
+                  <div key={prod.id} style={{ backgroundColor: '#141414', border: pocoStock ? '1px solid #ff4d4d' : '1px solid #222', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative' }}>
                     
-                    <div style={{ padding: '15px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '10px', backgroundColor: '#222', color: '#DDD', padding: '2px 6px', borderRadius: '4px' }}>
-                          {prod.categoria}
-                        </span>
+                    {/* BADGE DE INSTALACIÓN */}
+                    {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
+                      <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '4px', zIndex: 1 }}>
+                        🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
+                      </span>
+                    )}
 
-                        {/* ALERTAS DINÁMICAS DE STOCK */}
-                        {sinStock ? (
-                          <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
-                            🔴 AGOTADO
+                    <div>
+                      <img src={prod.imagenUrl} alt={prod.nombre} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+                      
+                      <div style={{ padding: '15px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '10px', backgroundColor: '#222', color: '#DDD', padding: '2px 6px', borderRadius: '4px' }}>
+                            {prod.categoria}
                           </span>
-                        ) : pocoStock ? (
-                          <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
-                            ⚠️ ¡Quedan solo {stock} unds!
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: '#888' }}>
-                            Stock: {stock}
-                          </span>
-                        )}
+
+                          {/* ALERTAS DINÁMICAS DE STOCK */}
+                          {sinStock ? (
+                            <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
+                              🔴 AGOTADO
+                            </span>
+                          ) : pocoStock ? (
+                            <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                              ⚠️ ¡Quedan solo {stock} unds!
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#888' }}>
+                              Stock: {stock}
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>
+                          {prod.nombre}
+                        </h3>
+                        <p style={{ fontSize: '18px', fontWeight: '900', color: '#E50914', margin: '0' }}>
+                          RD$ {prod.precio}
+                        </p>
                       </div>
+                    </div>
 
-                      <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0', color: '#FFF' }}>
-                        {prod.nombre}
-                      </h3>
-                      <p style={{ fontSize: '18px', fontWeight: '900', color: '#E50914', margin: '0' }}>
-                        RD$ {prod.precio}
-                      </p>
+                    <div style={{ padding: '15px', paddingTop: '0' }}>
+                      <button
+                        disabled={sinStock}
+                        onClick={() => addToCart(prod)}
+                        style={{
+                          width: '100%',
+                          backgroundColor: sinStock ? '#333' : pocoStock ? '#ff4d4d' : '#E50914',
+                          color: sinStock ? '#666' : '#FFF',
+                          border: 'none',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          fontWeight: 'bold',
+                          cursor: sinStock ? 'not-allowed' : 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        {sinStock ? 'Sin Stock' : pocoStock ? `¡Comprar Ahora! (${stock} disp.)` : '+ Agregar al Carrito'}
+                      </button>
                     </div>
                   </div>
-
-                  <div style={{ padding: '15px', paddingTop: '0' }}>
-                    <button
-                      disabled={sinStock}
-                      onClick={() => addToCart(prod)}
-                      style={{
-                        width: '100%',
-                        backgroundColor: sinStock ? '#333' : pocoStock ? '#ff4d4d' : '#E50914',
-                        color: sinStock ? '#666' : '#FFF',
-                        border: 'none',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        fontWeight: 'bold',
-                        cursor: sinStock ? 'not-allowed' : 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      {sinStock ? 'Sin Stock' : pocoStock ? `¡Comprar Ahora! (${stock} disp.)` : '+ Agregar al Carrito'}
-                    </button>
-                  </div>
-                </div>
-              );
+                );
+              })}
+            </div>
+          )}
             })}
 
       {/* Modal Carrito Adaptable */}
