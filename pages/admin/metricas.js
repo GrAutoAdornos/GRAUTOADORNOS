@@ -77,85 +77,90 @@ export default function MetricasAdmin() {
     }
   };
 
-  const calcularTotalesPorMes = (pedidos, claveMes, mapaProductos) => {
-    let ventasTotales = 0;
-    let costoProductosVendidos = 0;
-    let totalInstalaciones = 0;
-    let totalEnvios = 0;
-    let cantidadOrdenes = 0;
+const calcularTotalesPorMes = (pedidos, claveMes, mapaProductos) => {
+  let ventasTotales = 0;
+  let costoProductosVendidos = 0;
+  let totalInstalaciones = 0;
+  let totalEnvios = 0;
+  let cantidadOrdenes = 0;
 
-    pedidos.forEach((p) => {
-      let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
-      const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
+  pedidos.forEach((p) => {
+    let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
+    const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
-      if (mesPedido === claveMes) {
-        cantidadOrdenes++;
-        const totalOrden = Number(p.total ?? 0);
-        ventasTotales += totalOrden;
+    if (mesPedido === claveMes) {
+      cantidadOrdenes++;
+      const totalOrden = Number(p.total ?? 0);
+      ventasTotales += totalOrden;
 
-        const detalles = p.detalles || p.productos || '';
-        let costoInstalacionOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
-        let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
+      const detalles = p.detalles || p.productos || '';
+      let costoInstalacionOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
+      let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
 
-        // --- EXTRACCIÓN DE INSTALACIÓN ---
-        if (costoInstalacionOrden === 0 && detalles.toLowerCase().includes('instalación')) {
-          Object.keys(mapaProductos).forEach((nombreProd) => {
-            if (detalles.includes(nombreProd)) {
-              const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
-              const match = detalles.match(regex);
-              const cant = match ? parseInt(match[1], 10) : 1;
-              const tarifaInst = mapaProductos[nombreProd].precioInstalacion || 700;
-              
-              costoInstalacionOrden += (tarifaInst * cant);
-            }
-          });
-          if (costoInstalacionOrden === 0) costoInstalacionOrden = 700; // Valor predeterminado de instalación por orden
-        }
-
-        // --- EXTRACCIÓN DE ENVÍO / TRANSPORTISTA ---
-        if (costoEnvioOrden === 0) {
-          const textoMin = detalles.toLowerCase();
-          if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
-          else if (textoMin.includes('santo domingo')) costoEnvioOrden = 350;
-          else if (textoMin.includes('envío') || textoMin.includes('envio') || textoMin.includes('domicilio')) costoEnvioOrden = 300;
-        }
-
-        totalInstalaciones += costoInstalacionOrden;
-        totalEnvios += costoEnvioOrden;
-
-        // --- COSTO DE PRODUCTOS ---
-        let costoProdEnOrden = 0;
+      // --- EXTRACCIÓN DINÁMICA DE INSTALACIÓN SEGÚN EL PRODUCTO ---
+      if (costoInstalacionOrden === 0 && detalles.toLowerCase().includes('instalación')) {
         Object.keys(mapaProductos).forEach((nombreProd) => {
           if (detalles.includes(nombreProd)) {
+            // Obtener cantidad comprada en la orden
             const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
             const match = detalles.match(regex);
             const cant = match ? parseInt(match[1], 10) : 1;
-            
-            costoProdEnOrden += (mapaProductos[nombreProd].costo * cant);
+
+            // Busca el precio de instalación exacto configurado para ESE producto en Firebase
+            const tarifaInstalacionProd = Number(
+              mapaProductos[nombreProd].precioInstalacion ?? 
+              mapaProductos[nombreProd].costoInstalacion ?? 
+              0
+            );
+
+            costoInstalacionOrden += (tarifaInstalacionProd * cant);
           }
         });
-
-        if (costoProdEnOrden === 0) {
-          const netoProd = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
-          costoProdEnOrden = netoProd * 0.5; // Estimación 50% de costo si no se detecta el producto exacto
-        }
-
-        costoProductosVendidos += costoProdEnOrden;
       }
-    });
 
-    const gananciaNeta = ventasTotales - costoProductosVendidos - totalInstalaciones - totalEnvios;
+      // --- EXTRACCIÓN DE ENVÍO / TRANSPORTISTA ---
+      if (costoEnvioOrden === 0) {
+        const textoMin = detalles.toLowerCase();
+        if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
+        else if (textoMin.includes('santo domingo')) costoEnvioOrden = 350;
+        else if (textoMin.includes('envío') || textoMin.includes('envio') || textoMin.includes('domicilio')) costoEnvioOrden = 300;
+      }
 
-    return {
-      ventasTotales,
-      costoProductosVendidos,
-      totalInstalaciones,
-      totalEnvios,
-      gananciaNeta,
-      cantidadOrdenes
-    };
+      totalInstalaciones += costoInstalacionOrden;
+      totalEnvios += costoEnvioOrden;
+
+      // --- COSTO DE PRODUCTOS (CAPITAL RECUPERADO) ---
+      let costoProdEnOrden = 0;
+      Object.keys(mapaProductos).forEach((nombreProd) => {
+        if (detalles.includes(nombreProd)) {
+          const regex = new RegExp(`${nombreProd.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*\\(x(\\d+)\\)`, 'i');
+          const match = detalles.match(regex);
+          const cant = match ? parseInt(match[1], 10) : 1;
+          
+          costoProdEnOrden += (mapaProductos[nombreProd].costo * cant);
+        }
+      });
+
+      if (costoProdEnOrden === 0) {
+        const netoProd = Math.max(0, totalOrden - costoEnvioOrden - costoInstalacionOrden);
+        costoProdEnOrden = netoProd * 0.5;
+      }
+
+      costoProductosVendidos += costoProdEnOrden;
+    }
+  });
+
+  const gananciaNeta = ventasTotales - costoProductosVendidos - totalInstalaciones - totalEnvios;
+
+  return {
+    ventasTotales,
+    costoProductosVendidos,
+    totalInstalaciones,
+    totalEnvios,
+    gananciaNeta,
+    cantidadOrdenes
   };
-
+};
   const calcularVariacion = (actual, anterior) => {
     if (!anterior || anterior === 0) return actual > 0 ? '+100%' : '0%';
     const diff = ((actual - anterior) / anterior) * 100;
