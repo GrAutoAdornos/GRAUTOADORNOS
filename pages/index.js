@@ -807,13 +807,45 @@ export default function Home() {
                 <p style={{ margin: '5px 0 0', color: '#AAA' }}>* Titular: Landra Guzman, Freddy Rodriguez.</p>
               </div>
 
-              <button
-                type="submit"
-                disabled={enviando}
-                style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', marginTop: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-              >
-                {enviando ? 'Procesando Orden...' : 'Confirmar y Enviar Pedido'}
-              </button>
+                  div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+  <button
+    type="button"
+    onClick={() => {
+      setIsCheckoutOpen(false);
+      setIsCartOpen(true);
+    }}
+    style={{
+      flex: 1,
+      backgroundColor: '#333',
+      color: '#FFF',
+      border: '1px solid #444',
+      padding: '12px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      fontSize: '13px'
+    }}
+  >
+    ← Volver
+  </button>
+             <button
+    type="submit"
+    disabled={enviando}
+    style={{
+      flex: 2,
+      backgroundColor: '#25D366',
+      color: '#000',
+      border: 'none',
+      padding: '12px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }}
+  >
+    {enviando ? 'Procesando...' : 'Confirmar y Enviar Pedido'}
+  </button>
+    </div>
             </form>
           </div>
         </div>
