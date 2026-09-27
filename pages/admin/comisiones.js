@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import Link from 'next/link';
 
 export default function ReporteComisiones() {
+  const router = useRouter();
   const [citasCompletadas, setCitasCompletadas] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
@@ -35,7 +38,6 @@ export default function ReporteComisiones() {
   // Cargar citas/pedidos completados desde Firebase
   const obtenerCitasCompletadas = async () => {
     try {
-      // Intenta consultar la colección 'pedidos' o 'citas'
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
       let lista = [];
 
@@ -43,35 +45,53 @@ export default function ReporteComisiones() {
         const data = doc.data();
         const estado = data.estadoCita || data.estado;
         if (estado === 'Completada' || estado === 'Completado') {
+          // Extraer precio de instalación (prioriza precioInstalacion, luego costoInstalacion, luego precioManoObra o monto total de instalación)
+          const precioInstalacion = Number(data.precioInstalacion || data.costoInstalacion || data.instalacion || data.precioManoObra) || 0;
+          const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
+          
+          // Calcular comisión automática si no viene definida
+          let montoComision = Number(data.montoComision) || 0;
+          if (montoComision === 0 && precioInstalacion > 0 && porcentajeComision > 0) {
+            montoComision = (precioInstalacion * porcentajeComision) / 100;
+          }
+
           lista.push({
             id: doc.id,
             clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
-            vehiculo: data.vehiculo || data.detalles || 'Servicio General',
+            vehiculo: data.vehiculo || data.detalles || data.productos || 'Servicio de Instalación',
             tecnicoId: data.tecnicoId || '',
             tecnicoNombre: data.tecnicoNombre || 'Sin Asignar',
-            precioManoObra: Number(data.precioManoObra) || 0,
-            porcentajeComision: Number(data.porcentajeComision) || 0,
-            montoComision: Number(data.montoComision) || 0,
+            precioInstalacion: precioInstalacion,
+            porcentajeComision: porcentajeComision,
+            montoComision: montoComision,
             ...data
           });
         }
       });
 
-      // Si no encontró nada en 'pedidos', intenta con la colección 'citas'
+      // Si la colección usada es 'citas' directamente
       if (lista.length === 0) {
         const qCitas = query(collection(db, 'citas'), where('estado', '==', 'Completado'));
         const snapCitas = await getDocs(qCitas);
         snapCitas.forEach((doc) => {
           const data = doc.data();
+          const precioInstalacion = Number(data.precioInstalacion || data.costoInstalacion || data.instalacion || data.precioManoObra) || 0;
+          const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
+          
+          let montoComision = Number(data.montoComision) || 0;
+          if (montoComision === 0 && precioInstalacion > 0 && porcentajeComision > 0) {
+            montoComision = (precioInstalacion * porcentajeComision) / 100;
+          }
+
           lista.push({
             id: doc.id,
             clienteNombre: data.clienteNombre || data.cliente || 'Cliente General',
             vehiculo: data.vehiculo || data.detalles || 'Servicio General',
             tecnicoId: data.tecnicoId || '',
             tecnicoNombre: data.tecnicoNombre || 'Sin Asignar',
-            precioManoObra: Number(data.precioManoObra) || 0,
-            porcentajeComision: Number(data.porcentajeComision) || 0,
-            montoComision: Number(data.montoComision) || 0,
+            precioInstalacion: precioInstalacion,
+            porcentajeComision: porcentajeComision,
+            montoComision: montoComision,
             ...data
           });
         });
@@ -88,9 +108,24 @@ export default function ReporteComisiones() {
     ? citasCompletadas 
     : citasCompletadas.filter(c => c.tecnicoId === tecnicoFiltro);
 
+  // Re-calcular dinámicamente si el técnico tiene un porcentaje asignado
+  const citasConCalculo = citasFiltradas.map((item) => {
+    const tecObj = tecnicos.find((t) => t.id === item.tecnicoId);
+    const porcentaje = item.porcentajeComision || (tecObj ? Number(tecObj.porcentajeDefecto || tecObj.porcentaje) : 0);
+    const comision = item.montoComision > 0 
+      ? item.montoComision 
+      : (item.precioInstalacion * porcentaje) / 100;
+
+    return {
+      ...item,
+      porcentajeComision: porcentaje,
+      montoComision: comision
+    };
+  });
+
   // Totales acumulados
-  const totalManoObra = citasFiltradas.reduce((acc, curr) => acc + (curr.precioManoObra || 0), 0);
-  const totalComisiones = citasFiltradas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
+  const totalInstalaciones = citasConCalculo.reduce((acc, curr) => acc + (curr.precioInstalacion || 0), 0);
+  const totalComisiones = citasConCalculo.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif' }}>
@@ -105,11 +140,25 @@ export default function ReporteComisiones() {
         }
       `}</style>
 
-      <header style={{ marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
-        <h2>👷‍♂️ Reporte de Comisiones de Técnicos</h2>
+      {/* HEADER Y NAVEGACIÓN */}
+      <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <Link href="/admin/citas">
+            <button style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+              ← Volver a Citas
+            </button>
+          </Link>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>👷‍♂️ Reporte de Comisiones de Técnicos</h2>
+        </div>
+
+        <Link href="/admin/dashboard">
+          <button style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+            Volver al Panel
+          </button>
+        </Link>
       </header>
 
-      {/* Controles de filtro y exportación */}
+      {/* CONTROLES DE FILTRO Y EXPORTACIÓN */}
       <div className="no-print" style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <select 
           value={tecnicoFiltro} 
@@ -132,16 +181,16 @@ export default function ReporteComisiones() {
         </button>
       </div>
 
-      {/* Tarjetas de Resumen */}
+      {/* TARJETAS DE RESUMEN */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
           <p style={{ color: '#AAA', margin: 0, fontSize: '14px' }}>Trabajos Completados</p>
-          <h3 style={{ margin: '5px 0 0 0', color: '#FFF' }}>{citasFiltradas.length}</h3>
+          <h3 style={{ margin: '5px 0 0 0', color: '#FFF' }}>{citasConCalculo.length}</h3>
         </div>
 
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-          <p style={{ color: '#AAA', margin: 0, fontSize: '14px' }}>Total Mano de Obra</p>
-          <h3 style={{ margin: '5px 0 0 0', color: '#25D366' }}>RD$ {totalManoObra.toLocaleString()}</h3>
+          <p style={{ color: '#AAA', margin: 0, fontSize: '14px' }}>Total Precio Instalación</p>
+          <h3 style={{ margin: '5px 0 0 0', color: '#25D366' }}>RD$ {totalInstalaciones.toLocaleString()}</h3>
         </div>
 
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #E50914' }}>
@@ -150,7 +199,7 @@ export default function ReporteComisiones() {
         </div>
       </div>
 
-      {/* Tabla detallada de trabajos */}
+      {/* TABLA DETALLADA DE TRABAJOS */}
       {loading ? (
         <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Cargando reporte de comisiones...</p>
       ) : (
@@ -159,24 +208,24 @@ export default function ReporteComisiones() {
             <tr style={{ backgroundColor: '#222', color: '#FFF', borderBottom: '2px solid #444' }}>
               <th style={{ padding: '10px' }}>Cliente / Vehículo</th>
               <th style={{ padding: '10px' }}>Técnico</th>
-              <th style={{ padding: '10px' }}>Mano de Obra</th>
+              <th style={{ padding: '10px' }}>Precio Instalación</th>
               <th style={{ padding: '10px' }}>% Com.</th>
               <th style={{ padding: '10px' }}>Comisión a Pagar</th>
             </tr>
           </thead>
           <tbody>
-            {citasFiltradas.map((item) => (
+            {citasConCalculo.map((item) => (
               <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
                 <td style={{ padding: '10px' }}>{item.clienteNombre} - {item.vehiculo}</td>
                 <td style={{ padding: '10px' }}>{item.tecnicoNombre}</td>
-                <td style={{ padding: '10px' }}>RD$ {(item.precioManoObra || 0).toLocaleString()}</td>
+                <td style={{ padding: '10px' }}>RD$ {(item.precioInstalacion || 0).toLocaleString()}</td>
                 <td style={{ padding: '10px' }}>{item.porcentajeComision || 0}%</td>
                 <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }}>
                   RD$ {(item.montoComision || 0).toLocaleString()}
                 </td>
               </tr>
             ))}
-            {citasFiltradas.length === 0 && (
+            {citasConCalculo.length === 0 && (
               <tr>
                 <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
                   No hay instalaciones completadas registradas para este filtro.
