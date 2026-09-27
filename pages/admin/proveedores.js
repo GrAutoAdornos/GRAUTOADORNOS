@@ -82,13 +82,13 @@ export default function Proveedores() {
 
   const eliminarProveedor = async (id) => {
     if (confirm("¿Deseas eliminar este proveedor?")) {
-      await deleteDoc(doc(db, 'proveedores'), id);
+      await deleteDoc(doc(db, 'proveedores', id));
       if (proveedorSeleccionado?.id === id) setProveedorSeleccionado(null);
       cargarDatos();
     }
   };
 
-  // 🔍 Filtro 1: Filtrar proveedores por nombre, contacto o teléfono
+  // 🔍 Filtro 1: Filtrar proveedores en la lista lateral
   const proveedoresFiltrados = proveedores.filter((p) => {
     const q = busquedaProveedor.toLowerCase();
     return (
@@ -98,14 +98,25 @@ export default function Proveedores() {
     );
   });
 
-  // 🔍 Filtro 2: Filtrar productos globalmente para saber dónde fue comprado
+  // 🔍 Filtro 2: Proveedores encontrados en el buscador superior
+  const proveedoresCoincidentes = proveedores.filter((p) => {
+    if (!busquedaProducto.trim()) return false;
+    const q = busquedaProducto.toLowerCase();
+    return (
+      (p.nombre && p.nombre.toLowerCase().includes(q)) ||
+      (p.contacto && p.contacto.toLowerCase().includes(q)) ||
+      (p.telefono && p.telefono.toLowerCase().includes(q))
+    );
+  });
+
+  // 🔍 Filtro 3: Productos encontrados en el buscador superior (por producto, categoría o proveedor)
   const productosFiltradosGlobal = productos.filter((prod) => {
     if (!busquedaProducto.trim()) return false;
     const q = busquedaProducto.toLowerCase();
     return (
       (prod.nombre && prod.nombre.toLowerCase().includes(q)) ||
       (prod.categoria && prod.categoria.toLowerCase().includes(q)) ||
-      (prod.proveedor && prod.proveedor.toLowerCase().includes(q)) // 👈 Agregamos esta línea para incluir al proveedor
+      (prod.proveedor && prod.proveedor.toLowerCase().includes(q))
     );
   });
 
@@ -153,55 +164,69 @@ export default function Proveedores() {
 
         {/* 🔍 SECCIÓN DE BÚSQUEDA RÁPIDA DE PRODUCTOS Y PROVEEDORES */}
         <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '10px', padding: '15px', marginBottom: '25px' }}>
-          <h3 style={{ fontSize: '14px', color: '#FFF', marginTop: 0, marginBottom: '12px' }}>🔍 Rastreador de Producto & Proveedor</h3>
-          <p style={{ fontSize: '12px', color: '#888', marginTop: 0, marginBottom: '12px' }}>Escribe el nombre de un producto para recordar a quién se lo compraste o busca un proveedor perdido por nombre o contacto.</p>
+          <h3 style={{ fontSize: '14px', color: '#FFF', marginTop: 0, marginBottom: '8px' }}>🔍 Rastreador Rápido de Proveedores & Productos</h3>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: 0, marginBottom: '12px' }}>Escribe el nombre de un **Proveedor** (ej: TEMU) para ver su información de contacto o el nombre de un **Producto** (ej: Radio Android).</p>
 
           <input
             type="text"
-            placeholder="🔎 Buscar producto en el catálogo (ej: Luces LED, Radio Android...)"
+            placeholder="🔎 Escribe proveedor (ej: TEMU) o producto..."
             value={busquedaProducto}
             onChange={(e) => setBusquedaProducto(e.target.value)}
             style={{ width: '100%', backgroundColor: '#000', border: '1px solid #E50914', color: '#FFF', padding: '12px', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' }}
           />
 
-          {/* RESULTADOS DE LA BÚSQUEDA DE PRODUCTOS */}
+          {/* RESULTADOS DE LA BÚSQUEDA */}
           {busquedaProducto.trim() !== '' && (
-            <div style={{ marginTop: '15px', backgroundColor: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#25D366' }}>Resultados encontrados para: "{busquedaProducto}"</h4>
-              {productosFiltradosGlobal.length === 0 ? (
-                <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>No se encontraron productos con ese nombre.</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #333', color: '#888' }}>
-                      <th style={{ padding: '8px' }}>Producto</th>
-                      <th style={{ padding: '8px' }}>Proveedor Asignado</th>
-                      <th style={{ padding: '8px' }}>Contacto Proveedor</th>
-                      <th style={{ padding: '8px' }}>Costo Compra</th>
-                      <th style={{ padding: '8px' }}>Tiempo Entrega</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productosFiltradosGlobal.map((prod) => {
-                      // Buscar datos detallados del proveedor asociado al producto
-                      const provObj = proveedores.find(
-                        (prov) => prod.proveedor && prov.nombre.toLowerCase() === prod.proveedor.toLowerCase()
-                      );
-                      return (
+            <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* 1. DATOS DEL PROVEEDOR ENCONTRADO */}
+              {proveedoresCoincidentes.length > 0 && (
+                <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #E50914' }}>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#E50914' }}>🏢 Datos del Proveedor Encontrado</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    {proveedoresCoincidentes.map((prov) => (
+                      <div key={prov.id} style={{ backgroundColor: '#141414', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}>
+                        <h5 style={{ margin: '0 0 6px 0', fontSize: '14px', color: '#FFF' }}>{prov.nombre}</h5>
+                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#AAA' }}>📞 <strong>Teléfono:</strong> {prov.telefono || 'Sin registrar'}</p>
+                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#AAA' }}>👤 <strong>Contacto:</strong> {prov.contacto || 'N/A'}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#AAA' }}>📍 <strong>Dirección:</strong> {prov.direccion || 'N/A'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. PRODUCTOS VINCULADOS A LA BÚSQUEDA */}
+              <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#25D366' }}>📦 Productos Vinculados ({productosFiltradosGlobal.length})</h4>
+                {productosFiltradosGlobal.length === 0 ? (
+                  <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>No hay productos registrados con este filtro de búsqueda.</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #333', color: '#888' }}>
+                        <th style={{ padding: '8px' }}>Producto</th>
+                        <th style={{ padding: '8px' }}>Proveedor</th>
+                        <th style={{ padding: '8px' }}>Costo Compra</th>
+                        <th style={{ padding: '8px' }}>Precio Venta</th>
+                        <th style={{ padding: '8px' }}>Tiempo Entrega</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productosFiltradosGlobal.map((prod) => (
                         <tr key={prod.id} style={{ borderBottom: '1px solid #222' }}>
                           <td style={{ padding: '8px', fontWeight: 'bold', color: '#FFF' }}>{prod.nombre}</td>
-                          <td style={{ padding: '8px', color: '#E50914', fontWeight: 'bold' }}>{prod.proveedor || 'Sin proveedor asignado'}</td>
-                          <td style={{ padding: '8px', color: '#AAA' }}>
-                            {provObj ? `📞 ${provObj.telefono || 'Sin Télf.'} (${provObj.contacto || 'N/A'})` : 'N/A'}
-                          </td>
+                          <td style={{ padding: '8px', color: '#E50914', fontWeight: 'bold' }}>{prod.proveedor || 'Sin proveedor'}</td>
                           <td style={{ padding: '8px', color: '#ff4d4d' }}>RD$ {prod.costoCompra || 0}</td>
+                          <td style={{ padding: '8px', color: '#25D366' }}>RD$ {prod.precio || 0}</td>
                           <td style={{ padding: '8px', color: '#AAA' }}>⏱️ {prod.tiempoEntrega || 'No especificado'}</td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
             </div>
           )}
         </div>
@@ -211,7 +236,6 @@ export default function Proveedores() {
           <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '15px' }}>
             <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Directorio de Proveedores</h3>
             
-            {/* Buscador de proveedores */}
             <input
               type="text"
               placeholder="🔍 Filtrar por nombre, teléfono o contacto..."
