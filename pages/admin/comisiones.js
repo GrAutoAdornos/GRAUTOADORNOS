@@ -20,13 +20,11 @@ export default function ReporteComisiones() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      // 1. Obtener catálogo de productos desde el Dashboard para cruzar los precios de instalación exactos
       const snapProductos = await getDocs(collection(db, 'productos'));
       const mapaProductos = {};
       snapProductos.forEach((doc) => {
         const prodData = doc.data();
         const nombreProd = (prodData.nombre || doc.id).toLowerCase().trim();
-        // Guardar el monto exacto de la instalación definido en el Dashboard
         mapaProductos[nombreProd] = Number(prodData.precioInstalacion || prodData.instalacion || prodData.costoInstalacion || 0);
       });
 
@@ -38,7 +36,6 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Cargar técnicos
   const obtenerTecnicos = async () => {
     try {
       const snap = await getDocs(collection(db, 'tecnicos'));
@@ -52,27 +49,18 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Función para obtener EXCLUSIVAMENTE el precio de la instalación (excluyendo el costo del producto)
   const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
     let tarifaInstalacion = 0;
 
-    // A) Si el objeto del pedido trae un campo explícito únicamente para la instalación
-    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) {
-      return Number(data.precioInstalacion);
-    }
-    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) {
-      return Number(data.costoInstalacion);
-    }
+    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
+    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
 
-    // B) Si viene el array de productos comprados en el pedido
     if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
-        // Si el objeto producto dentro del pedido ya trae la propiedad de instalación
         const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
         if (montoInst > 0) {
           tarifaInstalacion += montoInst;
         } else {
-          // Si no la trae, buscar por el nombre del producto en el catálogo traído del Dashboard
           const nombre = (p.nombre || p.titulo || '').toLowerCase().trim();
           if (mapaProductos[nombre]) {
             tarifaInstalacion += mapaProductos[nombre];
@@ -82,10 +70,7 @@ export default function ReporteComisiones() {
       if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    // C) Si el detalle es un texto (Ej: "logo (x1) [Con Instalación]")
     const textoDetalle = String(data.detalles || data.vehiculo || data.producto || '').toLowerCase();
-
-    // Buscar en el catálogo qué producto del texto coincide y extraer su precio de instalación del Dashboard
     Object.keys(mapaProductos).forEach((nombreProd) => {
       if (textoDetalle.includes(nombreProd) && mapaProductos[nombreProd] > 0) {
         tarifaInstalacion += mapaProductos[nombreProd];
@@ -95,7 +80,6 @@ export default function ReporteComisiones() {
     return tarifaInstalacion;
   };
 
-  // Cargar pedidos y citas completadas
   const obtenerCitasCompletadas = async (mapaProductos) => {
     try {
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
@@ -106,7 +90,6 @@ export default function ReporteComisiones() {
         const estado = data.estadoCita || data.estado;
 
         if (estado === 'Completada' || estado === 'Completado') {
-          // Extraer SOLO el costo del servicio de instalación
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
@@ -133,7 +116,6 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Cambiar estado de pago al técnico
   const cambiarEstadoPago = async (id, estadoActual) => {
     const nuevoEstado = estadoActual === 'pagado' ? 'pendiente' : 'pagado';
     try {
@@ -149,14 +131,12 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Procesar comisiones dinámicamente según el porcentaje asignado al técnico
   const citasProcesadas = citasCompletadas.map((item) => {
     const tecObj = tecnicos.find((t) => t.id === item.tecnicoId);
     const porcentaje = item.porcentajeComision > 0 
       ? item.porcentajeComision 
       : (tecObj ? Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 20) : 0);
 
-    // Comisión únicamente sobre el precio de instalación extraído
     const comisionCalculada = (item.precioInstalacion * porcentaje) / 100;
 
     return {
@@ -166,7 +146,6 @@ export default function ReporteComisiones() {
     };
   });
 
-  // Filtros
   const citasFiltradas = citasProcesadas.filter((c) => {
     if (tecnicoFiltro !== 'todos' && c.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && c.estadoPagoTecnico !== 'pendiente') return false;
@@ -174,26 +153,37 @@ export default function ReporteComisiones() {
     return true;
   });
 
-  // Totales
   const totalInstalaciones = citasFiltradas.reduce((acc, curr) => acc + (curr.precioInstalacion || 0), 0);
   const totalComisiones = citasFiltradas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
-  // Recibo de servicios pagados
+  // Filtro exclusivo para el Recibo de Pago (Solo lo pagado)
   const citasSoloPagadas = citasFiltradas.filter((c) => c.estadoPagoTecnico === 'pagado');
   const totalComisionesPagadas = citasSoloPagadas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
-  const tecSeleccionadoNombre = tecnicos.find((t) => t.id === tecnicoFiltro)?.nombre || 'Técnico General';
+  const tecSeleccionadoNombre = tecnicos.find((t) => t.id === tecnicoFiltro)?.nombre || (citasSoloPagadas[0]?.tecnicoNombre || 'Técnico General');
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif' }}>
       
+      {/* Estilos específicos para formatear el Recibo de Pago en impresión */}
       <style jsx global>{`
         @media print {
           body { background-color: #FFF !important; color: #000 !important; }
           header, nav, button, select, .no-print { display: none !important; }
-          .area-recibo { color: #000 !important; background-color: #FFF !important; border: 1px solid #000 !important; }
-          table { width: 100% !important; color: #000 !important; border-collapse: collapse !important; }
-          th, td { border: 1px solid #999 !important; color: #000 !important; padding: 8px !important; }
+          .area-recibo { 
+            color: #000 !important; 
+            background-color: #FFF !important; 
+            border: 2px solid #000 !important; 
+            box-shadow: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 20px !important;
+          }
+          .area-recibo table { width: 100% !important; color: #000 !important; border-collapse: collapse !important; }
+          .area-recibo th { background-color: #F0F0F0 !important; color: #000 !important; border: 1px solid #000 !important; }
+          .area-recibo td { border: 1px solid #000 !important; color: #000 !important; }
+          .area-recibo .resumen-box { border: 1px solid #000 !important; background-color: #FFF !important; color: #000 !important; }
+          .area-recibo .texto-impresion { color: #000 !important; }
         }
       `}</style>
 
@@ -215,7 +205,7 @@ export default function ReporteComisiones() {
         </Link>
       </header>
 
-      {/* CONTROLES */}
+      {/* BARRA DE CONTROLES */}
       <div className="no-print" style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <select 
           value={tecnicoFiltro} 
@@ -244,50 +234,63 @@ export default function ReporteComisiones() {
           onClick={() => setModoRecibo(!modoRecibo)}
           style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          {modoRecibo ? '📋 Volver a Tabla General' : '🧾 Ver Recibo de Pago (Firmas)'}
+          {modoRecibo ? '📋 Volver a Tabla General' : '🧾 Ver Recibo de Pago'}
         </button>
 
         <button 
           onClick={() => window.print()}
           style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          🖨️ Imprimir / Guardar PDF
+          🖨️ Imprimir Recibo
         </button>
       </div>
 
-      {/* VISTA RECIBO */}
+      {/* VISTA 1: RECIBO DE PAGO OFICIAL PARA IMPRIMIR */}
       {modoRecibo ? (
-        <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '30px', borderRadius: '10px', border: '1px solid #333', maxWidth: '800px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0, fontSize: '22px' }}>GR AUTO ADORNOS</h2>
-            <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#AAA' }}>COMPROBANTE DE PAGO DE COMISIONES A TÉCNICO</p>
-            <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#FFB800' }}>
-              Técnico: <strong>{tecSeleccionadoNombre}</strong> | Fecha: {new Date().toLocaleDateString()}
+        <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
+          
+          {/* Encabezado Comprobante */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }} className="texto-impresion">GR AUTO ADORNOS</h1>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#AAA' }} className="texto-impresion">Servicios de Instalación & Accesorios Automotrices</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>COMPROBANTE DE PAGO</h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha: {new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          {/* Información del Técnico */}
+          <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333' }} className="resumen-box">
+            <p style={{ margin: 0, fontSize: '14px' }} className="texto-impresion">
+              Técnico / Instalador: <strong>{tecSeleccionadoNombre}</strong>
             </p>
           </div>
 
-          <p style={{ fontSize: '13px', color: '#CCC', marginBottom: '15px' }}>
-            Servicios completados y <strong>PAGADOS</strong>:
+          <p style={{ fontSize: '13px', color: '#CCC', marginBottom: '12px' }} className="texto-impresion">
+            Detalle de instalaciones y servicios <strong>PAGADOS Y LIQUIDADOS</strong>:
           </p>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+          {/* Tabla Desglose de Pago */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '25px' }}>
             <thead>
               <tr style={{ backgroundColor: '#222', color: '#FFF', textAlign: 'left' }}>
-                <th style={{ padding: '8px', fontSize: '12px' }}>Fecha</th>
-                <th style={{ padding: '8px', fontSize: '12px' }}>Cliente / Servicio</th>
-                <th style={{ padding: '8px', fontSize: '12px' }}>Precio Inst.</th>
-                <th style={{ padding: '8px', fontSize: '12px' }}>%</th>
-                <th style={{ padding: '8px', fontSize: '12px' }}>Comisión Pagada</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Fecha</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Cliente / Trabajo Realizado</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Precio Instalación</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>% Com.</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Comisión Pagada</th>
               </tr>
             </thead>
             <tbody>
               {citasSoloPagadas.map((item) => (
                 <tr key={item.id} style={{ borderBottom: '1px solid #333', fontSize: '13px' }}>
-                  <td style={{ padding: '8px' }}>{item.fecha}</td>
-                  <td style={{ padding: '8px' }}>{item.clienteNombre} - {item.vehiculo}</td>
-                  <td style={{ padding: '8px' }}>RD$ {(item.precioInstalacion || 0).toLocaleString()}</td>
-                  <td style={{ padding: '8px' }}>{item.porcentajeComision}%</td>
-                  <td style={{ padding: '8px', fontWeight: 'bold', color: '#25D366' }}>
+                  <td style={{ padding: '10px' }} className="texto-impresion">{item.fecha}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculo}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">RD$ {(item.precioInstalacion || 0).toLocaleString()}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">{item.porcentajeComision}%</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">
                     RD$ {(item.montoComision || 0).toLocaleString()}
                   </td>
                 </tr>
@@ -295,32 +298,35 @@ export default function ReporteComisiones() {
               {citasSoloPagadas.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                    No hay servicios marcados como "Pagado" para este filtro.
+                    No hay trabajos marcados como "PAGADO" para este técnico.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px', borderRadius: '8px', border: '1px solid #333', marginBottom: '40px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>TOTAL LIQUIDADO:</span>
-            <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#25D366' }}>RD$ {totalComisionesPagadas.toLocaleString()}</span>
+          {/* Total Liquidado */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }} className="resumen-box">
+            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO / LIQUIDADO:</span>
+            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisionesPagadas.toLocaleString()}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '60px', textAlign: 'center' }}>
-            <div style={{ width: '220px', borderTop: '1px solid #FFF', paddingTop: '8px' }}>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold' }}>Firma del Técnico</p>
-              <p style={{ margin: '3px 0 0 0', fontSize: '10px', color: '#AAA' }}>{tecSeleccionadoNombre}</p>
+          {/* Firmas de Conformidad */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '70px', padding: '0 30px' }}>
+            <div style={{ width: '220px', borderTop: '1px solid #888', paddingTop: '8px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Firma del Técnico</p>
+              <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#888' }} className="texto-impresion">{tecSeleccionadoNombre}</p>
             </div>
-            <div style={{ width: '220px', borderTop: '1px solid #FFF', paddingTop: '8px' }}>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold' }}>Administración / Recibido</p>
-              <p style={{ margin: '3px 0 0 0', fontSize: '10px', color: '#AAA' }}>GR Auto Adornos</p>
+            <div style={{ width: '220px', borderTop: '1px solid #888', paddingTop: '8px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Recibido Conforme Admin</p>
+              <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#888' }} className="texto-impresion">GR Auto Adornos</p>
             </div>
           </div>
+
         </div>
       ) : (
 
-        /* TABLA PRINCIPAL */
+        /* VISTA 2: TABLA PRINCIPAL DE GESTIÓN DE COMISIONES */
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
