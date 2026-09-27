@@ -16,14 +16,6 @@ const exportarCitasPDF = () => {
   window.print();
 };
 
-// Botón para la vista
-<button
-  onClick={exportarCitasPDF}
-  style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
->
-  🖨️ Imprimir Citas (PDF)
-</button>
-
   // Estado para el formulario de cita manual
   const [mostrarModal, setMostrarModal] = useState(false);
   const [nuevaCita, setNuevaCita] = useState({
