@@ -1,4 +1,3 @@
-// pages/admin/clientes.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
@@ -21,11 +20,10 @@ export default function ClientesAdmin() {
     cargarClientesYHistorial();
   }, [router]);
 
-  // Función auxiliar para extraer el Nombre sin importar cómo esté en Firebase
+  // 1. Extraer Nombre
   const extraerNombre = (data) => {
-    if (!data) return null;
+    if (!data) return 'Cliente Sin Nombre';
     
-    // 1. Si está dentro del objeto cliente
     if (data.cliente && typeof data.cliente === 'object') {
       const c = data.cliente;
       if (c.nombre) return c.nombre;
@@ -33,13 +31,11 @@ export default function ClientesAdmin() {
       if (c.fullName) return c.fullName;
       if (c.nombreCliente) return c.nombreCliente;
     }
-    
-    // 2. Si cliente es directamente un string/texto
+
     if (typeof data.cliente === 'string' && data.cliente.trim() !== '') {
       return data.cliente;
     }
 
-    // 3. Revisar campos raíz directos del documento de pedido
     if (data.nombreCliente) return data.nombreCliente;
     if (data.clienteNombre) return data.clienteNombre;
     if (data.nombre_cliente) return data.nombre_cliente;
@@ -49,9 +45,7 @@ export default function ClientesAdmin() {
     if (data.comprador) return data.comprador;
     if (data.usuario) return data.usuario;
     if (data.displayName) return data.displayName;
-    if (data.email) return data.email;
 
-    // 4. Si los datos del cliente vinieron dentro de enví­o/shipping/datos
     if (data.envio && typeof data.envio === 'object') {
       if (data.envio.nombre) return data.envio.nombre;
       if (data.envio.nombreCliente) return data.envio.nombreCliente;
@@ -63,14 +57,26 @@ export default function ClientesAdmin() {
     return 'Cliente Sin Nombre';
   };
 
-  // Función auxiliar para extraer el Teléfono
+  // 2. Extraer Teléfono (ampliado)
   const extraerTelefono = (data) => {
     if (!data) return 'Sin Teléfono';
 
     if (data.cliente && typeof data.cliente === 'object') {
       const c = data.cliente;
-      if (c.telefono || c.phone || c.celular || c.tel) {
-        return c.telefono || c.phone || c.celular || c.tel;
+      if (c.telefono || c.phone || c.celular || c.tel || c.whatsapp) {
+        return c.telefono || c.phone || c.celular || c.tel || c.whatsapp;
+      }
+    }
+
+    if (data.envio && typeof data.envio === 'object') {
+      if (data.envio.telefono || data.envio.phone || data.envio.celular) {
+        return data.envio.telefono || data.envio.phone || data.envio.celular;
+      }
+    }
+
+    if (data.datos && typeof data.datos === 'object') {
+      if (data.datos.telefono || data.datos.phone || data.datos.celular) {
+        return data.datos.telefono || data.datos.phone || data.datos.celular;
       }
     }
 
@@ -80,12 +86,42 @@ export default function ClientesAdmin() {
       data.celular || 
       data.tel || 
       data.whatsapp || 
-      (data.envio && (data.envio.telefono || data.envio.phone)) ||
       'Sin Teléfono'
     );
   };
 
-  // Función auxiliar para extraer la Dirección
+  // 3. Extraer Email (nueva función)
+  const extraerEmail = (data) => {
+    if (!data) return 'Sin Correo';
+
+    if (data.cliente && typeof data.cliente === 'object') {
+      const c = data.cliente;
+      if (c.email || c.correo || c.mail) {
+        return c.email || c.correo || c.mail;
+      }
+    }
+
+    if (data.envio && typeof data.envio === 'object') {
+      if (data.envio.email || data.envio.correo) {
+        return data.envio.email || data.envio.correo;
+      }
+    }
+
+    if (data.datos && typeof data.datos === 'object') {
+      if (data.datos.email || data.datos.correo) {
+        return data.datos.email || data.datos.correo;
+      }
+    }
+
+    return (
+      data.email || 
+      data.correo || 
+      data.mail || 
+      'Sin Correo'
+    );
+  };
+
+  // 4. Extraer Dirección
   const extraerDireccion = (data) => {
     if (!data) return 'Dirección no registrada';
 
@@ -118,6 +154,7 @@ export default function ClientesAdmin() {
 
         const nombreCliente = extraerNombre(data);
         const telefono = extraerTelefono(data);
+        const email = extraerEmail(data);
         const direccion = extraerDireccion(data);
 
         const fechaPedido = data.fecha ? (data.fecha.toDate ? data.fecha.toDate() : new Date(data.fecha)) : new Date();
@@ -137,25 +174,32 @@ export default function ClientesAdmin() {
 
         const contactado = Boolean(data.fidelizacionContactado ?? false);
 
-        // Agrupar por teléfono o nombre para no duplicar clientes
+        // Agrupar por teléfono, email o nombre para no duplicar clientes
         const claveUnica = (telefono !== 'Sin Teléfono') 
           ? telefono 
-          : (nombreCliente !== 'Cliente Sin Nombre' ? nombreCliente : idPedido);
+          : (email !== 'Sin Correo' ? email : (nombreCliente !== 'Cliente Sin Nombre' ? nombreCliente : idPedido));
 
         if (!mapaClientes[claveUnica]) {
           mapaClientes[claveUnica] = {
             idDocUltimoPedido: idPedido,
             nombre: nombreCliente,
             telefono: telefono,
+            email: email,
             direccion: direccion,
             totalInvertido: 0,
             contactado: contactado,
             historialCompras: []
           };
         } else {
-          // Si antes no tenía nombre pero en otro pedido sí, actualizamos el nombre
+          // Completar o actualizar datos si estaban incompletos
           if (mapaClientes[claveUnica].nombre === 'Cliente Sin Nombre' && nombreCliente !== 'Cliente Sin Nombre') {
             mapaClientes[claveUnica].nombre = nombreCliente;
+          }
+          if (mapaClientes[claveUnica].telefono === 'Sin Teléfono' && telefono !== 'Sin Teléfono') {
+            mapaClientes[claveUnica].telefono = telefono;
+          }
+          if (mapaClientes[claveUnica].email === 'Sin Correo' && email !== 'Sin Correo') {
+            mapaClientes[claveUnica].email = email;
           }
         }
 
@@ -212,7 +256,8 @@ export default function ClientesAdmin() {
     const cumpleBusqueda =
       !textoBusqueda ||
       c.nombre.toLowerCase().includes(textoBusqueda) ||
-      c.telefono.toLowerCase().includes(textoBusqueda);
+      c.telefono.toLowerCase().includes(textoBusqueda) ||
+      c.email.toLowerCase().includes(textoBusqueda);
 
     return cumpleEstado && cumpleBusqueda;
   });
@@ -240,7 +285,7 @@ export default function ClientesAdmin() {
         <div style={{ marginBottom: '20px' }}>
           <input
             type="text"
-            placeholder="🔍 Buscar cliente por nombre o teléfono..."
+            placeholder="🔍 Buscar cliente por nombre, teléfono o correo..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{
@@ -310,7 +355,7 @@ export default function ClientesAdmin() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: clienteSeleccionado ? '1.2fr 1fr' : '1fr', gap: '20px' }}>
             
-            {/* LISTA */}
+            {/* LISTA DE CLIENTES */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {clientesFiltrados.length === 0 ? (
                 <p style={{ color: '#888', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #222', textAlign: 'center' }}>
@@ -326,7 +371,7 @@ export default function ClientesAdmin() {
                       borderRadius: '10px',
                       padding: '16px',
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justify: 'space-between',
                       alignItems: 'center',
                       flexWrap: 'wrap',
                       gap: '12px'
@@ -346,6 +391,7 @@ export default function ClientesAdmin() {
                         )}
                       </div>
                       <p style={{ margin: '2px 0', fontSize: '12px', color: '#AAA' }}>📞 Teléfono: {cliente.telefono}</p>
+                      <p style={{ margin: '2px 0', fontSize: '12px', color: '#AAA' }}>✉️ Correo: {cliente.email}</p>
                       <p style={{ margin: '2px 0', fontSize: '12px', color: '#AAA' }}>📍 Dirección: {cliente.direccion}</p>
                       <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#25D366', fontWeight: 'bold' }}>
                         💰 Total Comprado: RD$ {cliente.totalInvertido.toLocaleString()} ({cliente.historialCompras.length} compras)
@@ -406,6 +452,7 @@ export default function ClientesAdmin() {
 
                 <div style={{ fontSize: '13px', marginBottom: '15px', color: '#CCC' }}>
                   <p style={{ margin: '3px 0' }}><strong>📞 Teléfono:</strong> {clienteSeleccionado.telefono}</p>
+                  <p style={{ margin: '3px 0' }}><strong>✉️ Correo:</strong> {clienteSeleccionado.email}</p>
                   <p style={{ margin: '3px 0' }}><strong>📍 Dirección:</strong> {clienteSeleccionado.direccion}</p>
                   <p style={{ margin: '3px 0', color: '#25D366' }}>
                     <strong>Total acumulado:</strong> RD$ {clienteSeleccionado.totalInvertido.toLocaleString()}
