@@ -62,7 +62,7 @@ export default function Home() {
 
   const lanzarToast = (msg) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
+    setTimeout(() => setToastMsg(''), 2500);
   };
 
   const addToCart = (prod) => {
@@ -330,9 +330,31 @@ export default function Home() {
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
       {/* Toast Notificación */}
+      {/* Toast Notificación Estilizado */}
       {toastMsg && (
-        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#25D366', color: '#000', padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-          {toastMsg}
+        <div style={{
+          position: 'fixed',
+          bottom: '25px',
+          left: '25px',
+          backgroundColor: '#181818',
+          color: '#FFFFFF',
+          borderLeft: '4px solid #25D366',
+          borderTop: '1px solid #333',
+          borderRight: '1px solid #333',
+          borderBottom: '1px solid #333',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          fontSize: '13px',
+          fontWeight: '600',
+          zIndex: 9999,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          animation: 'fadeIn 0.3s ease-in-out'
+        }}>
+          <span style={{ color: '#25D366', fontSize: '16px' }}>✓</span>
+          <span>{toastMsg}</span>
         </div>
       )}
 
