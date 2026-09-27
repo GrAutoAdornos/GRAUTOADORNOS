@@ -237,38 +237,6 @@ export default function CitasAdmin() {
               Completadas
             </button>
 
-                <button style={{
-      backgroundColor: '#222',
-      color: '#FFF',
-      padding: '10px 16px',
-      borderRadius: '6px',
-      border: '1px solid #444',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px'
-    }}>
-      👷‍♂️ Gestionar Técnicos
-    </button>
-  </Link>
-
-  <Link href="/admin/comisiones">
-    <button style={{
-      backgroundColor: '#E50914',
-      color: '#FFF',
-      padding: '10px 16px',
-      borderRadius: '6px',
-      border: 'none',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px'
-    }}>
-      💰 Ver Comisiones
-    </button>
-
             <button
               onClick={exportarCitasPDF}
               style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #555', padding: '6px 12px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}
