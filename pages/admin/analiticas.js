@@ -79,14 +79,31 @@ export default function AnaliticasDashboard() {
     listaPedidos.forEach((p) => {
       const monto = Number(p.total || 0);
       
-      // Identificar al cliente por nombre, teléfono o email
-      const nombreCliente = p.nombre || p.cliente || p.email || 'Cliente Anónimo';
-      const telefonoCliente = p.telefono || '';
+      // 1. EXTRAER CAMPOS CON MULTIPLES FALLBACKS
+      const rawNombre = p.nombre || p.cliente || p.clienteNombre || p.nombreCliente || p.email || '';
+      const rawTelefono = p.telefono || p.clienteTelefono || p.phone || '';
 
-      if (!clientesMap[nombreCliente]) {
-        clientesMap[nombreCliente] = {
-          nombre: nombreCliente,
-          telefono: telefonoCliente,
+      // Limpiar datos
+      const nombreLimpio = rawNombre.toString().trim();
+      const telefonoLimpio = rawTelefono.toString().trim();
+
+      // Definir nombre visible
+      const nombreMostrar = nombreLimpio || (telefonoLimpio ? `Cliente (${telefonoLimpio})` : 'Cliente Anónimo');
+
+      // Clave única para agrupar: Teléfono primero, luego nombre en minúsculas
+      let clienteKey = 'anonimo';
+      if (telefonoLimpio) {
+        clienteKey = `tel_${telefonoLimpio}`;
+      } else if (nombreLimpio) {
+        clienteKey = `nom_${nombreLimpio.toLowerCase()}`;
+      } else {
+        clienteKey = `order_${p.id}`; // Si no tiene nada, no agrupar a todos en 'anonimo'
+      }
+
+      if (!clientesMap[clienteKey]) {
+        clientesMap[clienteKey] = {
+          nombre: nombreMostrar,
+          telefono: telefonoLimpio,
           totalGastado: 0,
           pedidosCount: 0
         };
@@ -97,8 +114,8 @@ export default function AnaliticasDashboard() {
         tTotal += monto;
 
         // Acumular gasto del cliente
-        clientesMap[nombreCliente].totalGastado += monto;
-        clientesMap[nombreCliente].pedidosCount += 1;
+        clientesMap[clienteKey].totalGastado += monto;
+        clientesMap[clienteKey].pedidosCount += 1;
 
         // Procesar fecha del pedido
         let fechaPedido = ahora;
@@ -158,6 +175,7 @@ export default function AnaliticasDashboard() {
 
     // PROCESAR TOP 5 CLIENTES FRECUENTES
     const topClientesOrdenados = Object.values(clientesMap)
+      .filter((c) => c.totalGastado > 0)
       .sort((a, b) => b.totalGastado - a.totalGastado)
       .slice(0, 5);
     setTopClientes(topClientesOrdenados);
@@ -282,7 +300,7 @@ export default function AnaliticasDashboard() {
 
             </div>
 
-            {/* SECCIÓN 3: NUEVAS FUNCIONALIDADES (TOP CLIENTES Y ALERTAS DE STOCK) */}
+            {/* SECCIÓN 3: TOP CLIENTES Y ALERTAS DE STOCK */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
               
               {/* TOP 5 CLIENTES FRECUENTES */}
