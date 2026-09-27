@@ -21,7 +21,12 @@ export default function AnaliticasDashboard() {
 
   // Métricas por Canal y Citas
   const [metricasCanal, setMetricasCanal] = useState({ web: 0, whatsapp: 0, pctWeb: 0, pctWhatsapp: 0 });
-  const [metricasCitas, setMetricasCitas] = useState({ totalHistoricas: 0, citasEsteSabado: 0 });
+  const [metricasCitas, setMetricasCitas] = useState({ 
+    totalHistoricas: 0, 
+    citasEsteSabado: 0,
+    citaHora1PM: false,
+    citaHora4PM: false 
+  });
 
   // Rankings y listas
   const [productosMasVendidos, setProductosMasVendidos] = useState([]);
@@ -98,6 +103,8 @@ export default function AnaliticasDashboard() {
     // Métricas por citas
     let countCitasTotales = 0;
     let countCitasEsteSabado = 0;
+    let citaHora1PM = false;
+    let citaHora4PM = false;
 
     const ahora = new Date();
     const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
@@ -152,6 +159,15 @@ export default function AnaliticasDashboard() {
         countCitasTotales += 1;
         if (p.fechaCita === strProximoSabado) {
           countCitasEsteSabado += 1;
+
+          // Evaluar horario ocupado
+          const horaStr = (p.horaCita || '').toString();
+          if (horaStr.includes('1:00') || horaStr.includes('13:00')) {
+            citaHora1PM = true;
+          }
+          if (horaStr.includes('4:00') || horaStr.includes('16:00')) {
+            citaHora4PM = true;
+          }
         }
       }
 
@@ -276,7 +292,9 @@ export default function AnaliticasDashboard() {
     // Guardar Métricas de Citas
     setMetricasCitas({
       totalHistoricas: countCitasTotales,
-      citasEsteSabado: countCitasEsteSabado
+      citasEsteSabado: countCitasEsteSabado,
+      citaHora1PM,
+      citaHora4PM
     });
 
     // Ordenar productos más vendidos (Top 5)
@@ -434,6 +452,22 @@ export default function AnaliticasDashboard() {
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#FFF' }}>{metricasCitas.citasEsteSabado} / 2</p>
                     <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>Cupos Próximo Sábado</p>
+                  </div>
+                </div>
+
+                {/* DESGLOSE POR HORARIOS DETALLADOS */}
+                <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '6px', fontSize: '12px', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>🕒 Turno 1:00 PM</span>
+                    <span style={{ fontWeight: 'bold', color: metricasCitas.citaHora1PM ? '#E50914' : '#25D366' }}>
+                      {metricasCitas.citaHora1PM ? '🔴 Ocupado' : '🟢 Disponible'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>🕒 Turno 4:00 PM</span>
+                    <span style={{ fontWeight: 'bold', color: metricasCitas.citaHora4PM ? '#E50914' : '#25D366' }}>
+                      {metricasCitas.citaHora4PM ? '🔴 Ocupado' : '🟢 Disponible'}
+                    </span>
                   </div>
                 </div>
 
