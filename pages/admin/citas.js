@@ -71,6 +71,7 @@ export default function CitasAdmin() {
             estadoCita: data.estadoCita || 'Pendiente',
             fechaCita: fecha,
             horaCita: hora || 'Hora por definir',
+            tecnicoId: data.tecnicoId || '',
             tecnicoNombre: data.tecnicoNombre || 'Sin asignar',
             precioManoObra: data.precioManoObra || 0,
             montoComision: data.montoComision || 0,
@@ -104,6 +105,43 @@ export default function CitasAdmin() {
       );
     } catch (error) {
       console.error("Error al actualizar estado de la cita:", error);
+    }
+  };
+
+  // Reasignar técnico a una cita existente y recalcular comisión
+  const cambiarTecnicoCita = async (idPedido, nuevoTecnicoId, citaActual) => {
+    const tecnicoObj = listaTecnicos.find((t) => t.id === nuevoTecnicoId);
+    
+    const tecnicoNombre = tecnicoObj ? tecnicoObj.nombre : 'Sin asignar';
+    const porcentaje = tecnicoObj ? (tecnicoObj.porcentajeDefecto || tecnicoObj.porcentaje || 20) : 0;
+    const manoObra = Number(citaActual.precioManoObra) || 0;
+    const comisionCalculada = (manoObra * porcentaje) / 100;
+
+    try {
+      const refPedido = doc(db, 'pedidos', idPedido);
+      await updateDoc(refPedido, {
+        tecnicoId: nuevoTecnicoId,
+        tecnicoNombre: tecnicoNombre,
+        porcentajeComision: porcentaje,
+        montoComision: comisionCalculada
+      });
+
+      setCitas((prev) =>
+        prev.map((c) =>
+          c.id === idPedido
+            ? {
+                ...c,
+                tecnicoId: nuevoTecnicoId,
+                tecnicoNombre: tecnicoNombre,
+                porcentajeComision: porcentaje,
+                montoComision: comisionCalculada
+              }
+            : c
+        )
+      );
+    } catch (error) {
+      console.error("Error al reasignar técnico:", error);
+      alert("Error al reasignar el técnico.");
     }
   };
 
@@ -434,11 +472,42 @@ export default function CitasAdmin() {
                         <p style={{ margin: '4px 0 0 0', color: '#BBB' }}>{c.detalles}</p>
                       </div>
 
-                      {/* Info de Técnico y Comisión */}
-                      <div style={{ backgroundColor: '#1A1A1A', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', marginBottom: '15px', borderLeft: '3px solid #25D366' }}>
-                        <div>👷‍♂️ <strong>Técnico:</strong> {c.tecnicoNombre}</div>
+                      {/* Info y Selector de Técnico */}
+                      <div style={{ backgroundColor: '#1A1A1A', padding: '10px', borderRadius: '6px', fontSize: '11px', marginBottom: '15px', borderLeft: '3px solid #25D366' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '5px', fontWeight: 'bold' }}>
+                          👷‍♂️ Técnico Asignado:
+                        </label>
+                        <select
+                          value={c.tecnicoId || ''}
+                          onChange={(e) => cambiarTecnicoCita(c.id, e.target.value, c)}
+                          className="no-print"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            backgroundColor: '#0D0D0D',
+                            color: '#FFF',
+                            border: '1px solid #333',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            outline: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="">-- Sin Asignar --</option>
+                          {listaTecnicos.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.nombre} ({t.porcentajeDefecto || t.porcentaje || 20}%)
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Nombre visible en impresión */}
+                        <div style={{ display: 'none' }} className="print-only">
+                          <strong>Técnico:</strong> {c.tecnicoNombre}
+                        </div>
+
                         {c.precioManoObra > 0 && (
-                          <div style={{ color: '#25D366', marginTop: '3px' }}>
+                          <div style={{ color: '#25D366', marginTop: '6px', fontWeight: 'bold' }}>
                             💰 Mano de Obra: RD$ {c.precioManoObra.toLocaleString()} | Com: RD$ {c.montoComision.toLocaleString()}
                           </div>
                         )}
