@@ -107,13 +107,36 @@ export default function Home() {
       prev
         .map((item) => {
           if (item.id === id) {
+            const stockDisponible = Number(item.stock ?? 1);
             const nuevaCant = item.cantidad + delta;
+
+            if (delta > 0 && nuevaCant > stockDisponible) {
+              alert(`Solo queda(n) ${stockDisponible} unidad(es) disponible(s) en inventario.`);
+              return item;
+            }
+
             return nuevaCant > 0 ? { ...item, cantidad: nuevaCant } : null;
           }
           return item;
         })
         .filter(Boolean)
     );
+  };
+
+  const irAlCheckout = () => {
+    const productoExcedido = cart.find(
+      (item) => item.cantidad > Number(item.stock ?? 1)
+    );
+
+    if (productoExcedido) {
+      alert(
+        `El producto "${productoExcedido.nombre}" supera las unidades disponibles (Stock máximo: ${productoExcedido.stock ?? 1}). Por favor reduce la cantidad.`
+      );
+      return;
+    }
+
+    setIsCartOpen(false);
+    setIsCheckoutOpen(true);
   };
 
   // CÁLCULOS DE COSTOS
@@ -333,7 +356,7 @@ export default function Home() {
             onClick={() => setIsCartOpen(true)}
             style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-             🛒 Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
+              Carrito ({cart.reduce((a, c) => a + c.cantidad, 0)})
           </button>
         </div>
       </header>
@@ -407,7 +430,7 @@ export default function Home() {
                   {/* BADGE DE INSTALACIÓN */}
                   {(prod.requiereInstalacion || prod.costoInstalacion > 0) && (
                     <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#FFB800', color: '#000', fontSize: '10px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '4px', zIndex: 1 }}>
-                       🔧 Instalación disponible (+RD$ {prod.costoInstalacion || 0})
+                        Instalación disponible (+RD$ {prod.costoInstalacion || 0})
                     </span>
                   )}
 
@@ -425,11 +448,11 @@ export default function Home() {
                         {/* MOSTRAR STOCK SOLO SI ES <= 2 O AGOTADO */}
                         {sinStock ? (
                           <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold' }}>
-                            🔴 AGOTADO
+                             AGOTADO
                           </span>
                         ) : pocoStock ? (
                           <span style={{ fontSize: '11px', color: '#ff4d4d', fontWeight: 'bold', backgroundColor: 'rgba(255, 77, 77, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
-                            ⚠️ ¡Quedan solo {stock} unds!
+                             ¡Quedan solo {stock} unds!
                           </span>
                         ) : null}
                       </div>
@@ -484,37 +507,57 @@ export default function Home() {
                 <p style={{ color: '#888', textAlign: 'center', marginTop: '40px', fontSize: '13px' }}>El carrito está vacío.</p>
               ) : (
                 <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {cart.map((item) => (
-                    <div key={item.id} style={{ backgroundColor: '#1F1F1F', padding: '12px', borderRadius: '8px', border: '1px solid #2A2A2A' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <h4 style={{ fontSize: '13px', margin: '0', color: '#FFF' }}>{item.nombre}</h4>
-                          <p style={{ fontSize: '12px', color: '#E50914', margin: '2px 0 0', fontWeight: 'bold' }}>RD$ {item.precio}</p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <button onClick={() => updateCantidad(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
-                          <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{item.cantidad}</span>
-                          <button onClick={() => updateCantidad(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
-                          <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>✕</button>
-                        </div>
-                      </div>
+                  {cart.map((item) => {
+                    const stockDisponible = Number(item.stock ?? 1);
+                    const alcanzoLimite = item.cantidad >= stockDisponible;
 
-                      {(item.requiereInstalacion || item.costoInstalacion > 0) && (
-                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input 
-                            type="checkbox" 
-                            id={`inst-${item.id}`} 
-                            checked={item.incluirInstalacion} 
-                            onChange={() => toggleInstalacionCart(item.id)} 
-                            style={{ accentColor: '#E50914', cursor: 'pointer' }}
-                          />
-                          <label htmlFor={`inst-${item.id}`} style={{ fontSize: '11px', color: '#FFB800', cursor: 'pointer', fontWeight: 'bold' }}>
-                            Añadir Instalación (+RD$ {item.costoInstalacion || 0} c/u)
-                          </label>
+                    return (
+                      <div key={item.id} style={{ backgroundColor: '#1F1F1F', padding: '12px', borderRadius: '8px', border: '1px solid #2A2A2A' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <h4 style={{ fontSize: '13px', margin: '0', color: '#FFF' }}>{item.nombre}</h4>
+                            <p style={{ fontSize: '12px', color: '#E50914', margin: '2px 0 0', fontWeight: 'bold' }}>RD$ {item.precio}</p>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button onClick={() => updateCantidad(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
+                            <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{item.cantidad}</span>
+                            <button 
+                              onClick={() => updateCantidad(item.id, 1)} 
+                              disabled={alcanzoLimite}
+                              title={alcanzoLimite ? `Stock máximo: ${stockDisponible}` : ''}
+                              style={{ 
+                                backgroundColor: alcanzoLimite ? '#222' : '#333', 
+                                color: alcanzoLimite ? '#555' : '#FFF', 
+                                border: 'none', 
+                                padding: '2px 8px', 
+                                borderRadius: '4px', 
+                                cursor: alcanzoLimite ? 'not-allowed' : 'pointer',
+                                opacity: alcanzoLimite ? 0.5 : 1
+                              }}
+                            >
+                              +
+                            </button>
+                            <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>✕</button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {(item.requiereInstalacion || item.costoInstalacion > 0) && (
+                          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input 
+                              type="checkbox" 
+                              id={`inst-${item.id}`} 
+                              checked={item.incluirInstalacion} 
+                              onChange={() => toggleInstalacionCart(item.id)} 
+                              style={{ accentColor: '#E50914', cursor: 'pointer' }}
+                            />
+                            <label htmlFor={`inst-${item.id}`} style={{ fontSize: '11px', color: '#FFB800', cursor: 'pointer', fontWeight: 'bold' }}>
+                              Añadir Instalación (+RD$ {item.costoInstalacion || 0} c/u)
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -526,7 +569,7 @@ export default function Home() {
                   <span style={{ color: '#FFF', fontWeight: 'bold' }}>RD$ {subtotalProductos + subtotalInstalaciones}</span>
                 </div>
                 <button
-                  onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
+                  onClick={irAlCheckout}
                   style={{ width: '100%', backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}
                 >
                   Continuar al Pago
