@@ -1,4 +1,3 @@
-// pages/admin/desglose-transportista.js
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { collection, getDocs } from 'firebase/firestore';
@@ -12,13 +11,11 @@ export default function DesgloseTransportista() {
   const [items, setItems] = useState([]);
   const [totalPagar, setTotalPagar] = useState(0);
 
-  // Función para detectar o extraer la zona según los datos de la orden
   const obtenerZonaYDireccion = (p, detalles) => {
     let zona = p.zona || p.sector || p.provincia || '';
     let direccionRaw = p.direccion || detalles || '';
     const textoCompleto = `${zona} ${direccionRaw} ${detalles}`.toLowerCase();
 
-    // Detección automática si la zona no viene especificada directamente en el campo del objeto
     if (!zona) {
       if (textoCompleto.includes('herrera')) zona = 'Zona Herrera';
       else if (textoCompleto.includes('este') || textoCompleto.includes('sde')) zona = 'Santo Domingo Este';
@@ -48,11 +45,14 @@ export default function DesgloseTransportista() {
         let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
         const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
-        if (mesPedido === mes) {
+        // Normalizamos el estado para admitir distintas variantes (Completado, Entregado, etc.)
+        const estadoOrden = String(p.estado || p.status || '').toLowerCase().trim();
+        const esCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
+
+        if (mesPedido === mes && esCompletado) {
           const detalles = String(p.detalles || p.productos || '');
           let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
 
-          // Si el costo viene en 0, calcular tarifa estimada por zonas comunes
           if (costoEnvioOrden === 0) {
             const textoMin = detalles.toLowerCase();
             if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
