@@ -1,4 +1,3 @@
-// pages/admin/analiticas.js
 import { useState, useEffect } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -19,6 +18,10 @@ export default function AnaliticasDashboard() {
   const [pedidosPendientesCount, setPedidosPendientesCount] = useState(0);
   const [ticketPromedio, setTicketPromedio] = useState(0);
   const [totalPedidosCompletadosCount, setTotalPedidosCompletadosCount] = useState(0);
+
+  // Métricas por Canal y Citas
+  const [metricasCanal, setMetricasCanal] = useState({ web: 0, whatsapp: 0, pctWeb: 0, pctWhatsapp: 0 });
+  const [metricasCitas, setMetricasCitas] = useState({ totalHistoricas: 0, citasEsteSabado: 0 });
 
   // Rankings y listas
   const [productosMasVendidos, setProductosMasVendidos] = useState([]);
@@ -88,9 +91,23 @@ export default function AnaliticasDashboard() {
     let tPendiente = 0;
     let countPendientes = 0;
 
+    // Métricas por canal
+    let countWeb = 0;
+    let countWhatsapp = 0;
+
+    // Métricas por citas
+    let countCitasTotales = 0;
+    let countCitasEsteSabado = 0;
+
     const ahora = new Date();
     const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
     
+    // Calcular la fecha del próximo sábado
+    const proximoSabado = new Date(ahora);
+    const diasHastaSabado = (6 - proximoSabado.getDay() + 7) % 7;
+    proximoSabado.setDate(proximoSabado.getDate() + (diasHastaSabado === 0 && ahora.getDay() !== 6 ? 7 : diasHastaSabado));
+    const strProximoSabado = proximoSabado.toISOString().split('T')[0];
+
     // Hace 7 días
     const hace7Dias = new Date();
     hace7Dias.setDate(ahora.getDate() - 7);
@@ -110,6 +127,21 @@ export default function AnaliticasDashboard() {
 
       const esCompletado = ['completado', 'entregado', 'enviado'].includes(estadoNormalizado);
       const esPendiente = ['pendiente', 'en proceso', 'por pagar', 'procesando'].includes(estadoNormalizado);
+
+      // --- 0. PROCESAR CANALES Y CITAS (Aplica a todos los pedidos) ---
+      const esManualOWhatsApp = p.esManual || p.origenWhatsApp || p.canal === 'whatsapp' || p.origen === 'whatsapp';
+      if (esManualOWhatsApp) {
+        countWhatsapp += 1;
+      } else {
+        countWeb += 1;
+      }
+
+      if (p.requiereInstalacion || p.fechaCita || p.horaCita) {
+        countCitasTotales += 1;
+        if (p.fechaCita === strProximoSabado) {
+          countCitasEsteSabado += 1;
+        }
+      }
 
       // 1. EXTRAER CLIENTE CON MULTIPLES FALLBACKS
       const rawNombre = p.nombre || p.cliente || p.clienteNombre || p.nombreCliente || p.email || '';
@@ -220,6 +252,21 @@ export default function AnaliticasDashboard() {
     setTotalPedidosCompletadosCount(countCompletados);
     setTicketPromedio(countCompletados > 0 ? tTotal / countCompletados : 0);
 
+    // Guardar Métricas de Canal
+    const totalPedidosGbl = listaPedidos.length || 1;
+    setMetricasCanal({
+      web: countWeb,
+      whatsapp: countWhatsapp,
+      pctWeb: ((countWeb / totalPedidosGbl) * 100).toFixed(1),
+      pctWhatsapp: ((countWhatsapp / totalPedidosGbl) * 100).toFixed(1)
+    });
+
+    // Guardar Métricas de Citas
+    setMetricasCitas({
+      totalHistoricas: countCitasTotales,
+      citasEsteSabado: countCitasEsteSabado
+    });
+
     // Ordenar productos más vendidos (Top 5)
     const productosOrdenados = Object.keys(prodConteo)
       .map((nombre) => ({ nombre, cantidad: prodConteo[nombre] }))
@@ -329,6 +376,60 @@ export default function AnaliticasDashboard() {
                 </h3>
                 <span style={{ fontSize: '11px', color: '#888' }}>Gasto promedio por cada orden completada</span>
               </div>
+            </div>
+
+            {/* SECCIÓN NUEVA: CANALES DE VENTA Y FRECUENCIA DE CITAS */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+              
+              {/* Tarjeta: Porcentaje de Conversión por Canal */}
+              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>
+                  📊 Conversión por Canal de Venta
+                </h2>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+                    <span>🌐 Página Web Directa</span>
+                    <span style={{ color: '#25D366', fontWeight: 'bold' }}>{metricasCanal.pctWeb}% ({metricasCanal.web})</span>
+                  </div>
+                  <div style={{ width: '100%', backgroundColor: '#222', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${metricasCanal.pctWeb}%`, backgroundColor: '#25D366', height: '100%' }}></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+                    <span>💬 Manual / WhatsApp</span>
+                    <span style={{ color: '#E50914', fontWeight: 'bold' }}>{metricasCanal.pctWhatsapp}% ({metricasCanal.whatsapp})</span>
+                  </div>
+                  <div style={{ width: '100%', backgroundColor: '#222', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${metricasCanal.pctWhatsapp}%`, backgroundColor: '#E50914', height: '100%' }}></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarjeta: Frecuencia de Citas / Instalaciones */}
+              <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>
+                  🔧 Ocupación de Taller / Instalaciones
+                </h2>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <div>
+                    <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#FFB800' }}>{metricasCitas.totalHistoricas}</p>
+                    <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>Citas Históricas Totales</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#FFF' }}>{metricasCitas.citasEsteSabado} / 2</p>
+                    <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>Cupos Próximo Sábado</p>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#1A1A1A', padding: '10px', borderRadius: '6px', fontSize: '11px', color: '#CCC', borderLeft: '3px solid #FFB800' }}>
+                  💡 <b>Gestión de Taller:</b> Cada sábado cuenta con máximo 2 cupos de instalación (1:00 PM y 4:00 PM).
+                </div>
+              </div>
+
             </div>
 
             {/* SECCIÓN 2: PRODUCTOS MÁS VENDIDOS Y ZONAS */}
