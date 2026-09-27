@@ -9,7 +9,7 @@ export default function ReporteComisiones() {
   const [citasCompletadas, setCitasCompletadas] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
-  const [filtroPago, setFiltroPago] = useState('todos'); // 'todos', 'pendiente', 'pagado'
+  const [filtroPago, setFiltroPago] = useState('todos');
   const [loading, setLoading] = useState(true);
   const [modoRecibo, setModoRecibo] = useState(false);
 
@@ -19,11 +19,26 @@ export default function ReporteComisiones() {
 
   const cargarDatos = async () => {
     setLoading(true);
-    await Promise.all([obtenerTecnicos(), obtenerCitasCompletadas()]);
-    setLoading(false);
+    try {
+      // 1. Obtener catálogo de productos desde el Dashboard para cruzar los precios de instalación exactos
+      const snapProductos = await getDocs(collection(db, 'productos'));
+      const mapaProductos = {};
+      snapProductos.forEach((doc) => {
+        const prodData = doc.data();
+        const nombreProd = (prodData.nombre || doc.id).toLowerCase().trim();
+        // Guardar el monto exacto de la instalación definido en el Dashboard
+        mapaProductos[nombreProd] = Number(prodData.precioInstalacion || prodData.instalacion || prodData.costoInstalacion || 0);
+      });
+
+      await Promise.all([obtenerTecnicos(), obtenerCitasCompletadas(mapaProductos)]);
+    } catch (error) {
+      console.error("Error al cargar la información:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Cargar técnicos desde Firestore
+  // Cargar técnicos
   const obtenerTecnicos = async () => {
     try {
       const snap = await getDocs(collection(db, 'tecnicos'));
@@ -37,41 +52,51 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Función para extraer el costo de instalación del pedido o producto
-  const extraerPrecioInstalacion = (data) => {
-    // 1. Si existe un campo explícito en la raíz de la orden
-    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
-    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
-    if (data.instalacion && Number(data.instalacion) > 0) return Number(data.instalacion);
-    if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
+  // Función para obtener EXCLUSIVAMENTE el precio de la instalación (excluyendo el costo del producto)
+  const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
+    let tarifaInstalacion = 0;
 
-    // 2. Si viene dentro del array de productos de la orden
-    if (Array.isArray(data.productos)) {
-      let sumaInstalaciones = 0;
+    // A) Si el objeto del pedido trae un campo explícito únicamente para la instalación
+    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) {
+      return Number(data.precioInstalacion);
+    }
+    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) {
+      return Number(data.costoInstalacion);
+    }
+
+    // B) Si viene el array de productos comprados en el pedido
+    if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
-        if (p.precioInstalacion) sumaInstalaciones += Number(p.precioInstalacion);
-        else if (p.costoInstalacion) sumaInstalaciones += Number(p.costoInstalacion);
-        else if (p.conInstalacion && p.precioInstalacionExtra) sumaInstalaciones += Number(p.precioInstalacionExtra);
+        // Si el objeto producto dentro del pedido ya trae la propiedad de instalación
+        const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
+        if (montoInst > 0) {
+          tarifaInstalacion += montoInst;
+        } else {
+          // Si no la trae, buscar por el nombre del producto en el catálogo traído del Dashboard
+          const nombre = (p.nombre || p.titulo || '').toLowerCase().trim();
+          if (mapaProductos[nombre]) {
+            tarifaInstalacion += mapaProductos[nombre];
+          }
+        }
       });
-      if (sumaInstalaciones > 0) return sumaInstalaciones;
+      if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    // 3. Buscar monto de instalación en texto o total si no se especificó un desglose separado
-    if (data.detalles || data.productos) {
-      const textoDetalle = typeof data.detalles === 'string' ? data.detalles : JSON.stringify(data.productos || '');
-      // Busca patrones como "Instalación: RD$1000" o "Instalacion 500"
-      const matchMonto = textoDetalle.match(/instalaci[oó]n[^\d]*(\d+)/i);
-      if (matchMonto && matchMonto[1]) {
-        return Number(matchMonto[1]);
+    // C) Si el detalle es un texto (Ej: "logo (x1) [Con Instalación]")
+    const textoDetalle = String(data.detalles || data.vehiculo || data.producto || '').toLowerCase();
+
+    // Buscar en el catálogo qué producto del texto coincide y extraer su precio de instalación del Dashboard
+    Object.keys(mapaProductos).forEach((nombreProd) => {
+      if (textoDetalle.includes(nombreProd) && mapaProductos[nombreProd] > 0) {
+        tarifaInstalacion += mapaProductos[nombreProd];
       }
-    }
+    });
 
-    // 4. Fallback al total del pedido si la orden es exclusivamente un servicio de instalación
-    return Number(data.total || data.montoTotal || 0);
+    return tarifaInstalacion;
   };
 
-  // Cargar citas o pedidos completados
-  const obtenerCitasCompletadas = async () => {
+  // Cargar pedidos y citas completadas
+  const obtenerCitasCompletadas = async (mapaProductos) => {
     try {
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
       let lista = [];
@@ -79,9 +104,10 @@ export default function ReporteComisiones() {
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data();
         const estado = data.estadoCita || data.estado;
-        
+
         if (estado === 'Completada' || estado === 'Completado') {
-          const precioInstalacion = extraerPrecioInstalacion(data);
+          // Extraer SOLO el costo del servicio de instalación
+          const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
 
@@ -107,7 +133,7 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Actualizar estado de pago en Firebase
+  // Cambiar estado de pago al técnico
   const cambiarEstadoPago = async (id, estadoActual) => {
     const nuevoEstado = estadoActual === 'pagado' ? 'pendiente' : 'pagado';
     try {
@@ -123,13 +149,14 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Calcular comisión automática con base en el técnico y el costo de instalación
+  // Procesar comisiones dinámicamente según el porcentaje asignado al técnico
   const citasProcesadas = citasCompletadas.map((item) => {
     const tecObj = tecnicos.find((t) => t.id === item.tecnicoId);
     const porcentaje = item.porcentajeComision > 0 
       ? item.porcentajeComision 
       : (tecObj ? Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 20) : 0);
 
+    // Comisión únicamente sobre el precio de instalación extraído
     const comisionCalculada = (item.precioInstalacion * porcentaje) / 100;
 
     return {
@@ -147,11 +174,11 @@ export default function ReporteComisiones() {
     return true;
   });
 
-  // Totales generales
+  // Totales
   const totalInstalaciones = citasFiltradas.reduce((acc, curr) => acc + (curr.precioInstalacion || 0), 0);
   const totalComisiones = citasFiltradas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
-  // Citas solo pagadas para el recibo de firmas
+  // Recibo de servicios pagados
   const citasSoloPagadas = citasFiltradas.filter((c) => c.estadoPagoTecnico === 'pagado');
   const totalComisionesPagadas = citasSoloPagadas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
@@ -170,7 +197,7 @@ export default function ReporteComisiones() {
         }
       `}</style>
 
-      {/* HEADER */}
+      {/* HEADER DE NAVEGACIÓN */}
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Link href="/admin/citas">
@@ -190,7 +217,6 @@ export default function ReporteComisiones() {
 
       {/* CONTROLES */}
       <div className="no-print" style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        
         <select 
           value={tecnicoFiltro} 
           onChange={(e) => setTecnicoFiltro(e.target.value)}
@@ -229,7 +255,7 @@ export default function ReporteComisiones() {
         </button>
       </div>
 
-      {/* VISTA RECIBO CON FIRMAS */}
+      {/* VISTA RECIBO */}
       {modoRecibo ? (
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '30px', borderRadius: '10px', border: '1px solid #333', maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
@@ -241,7 +267,7 @@ export default function ReporteComisiones() {
           </div>
 
           <p style={{ fontSize: '13px', color: '#CCC', marginBottom: '15px' }}>
-            A continuación se detallan exclusivamente los trabajos que han sido <strong>PAGADOS</strong>:
+            Servicios completados y <strong>PAGADOS</strong>:
           </p>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
@@ -269,7 +295,7 @@ export default function ReporteComisiones() {
               {citasSoloPagadas.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                    No hay servicios marcados como "Pagado" para este técnico.
+                    No hay servicios marcados como "Pagado" para este filtro.
                   </td>
                 </tr>
               )}
@@ -277,7 +303,7 @@ export default function ReporteComisiones() {
           </table>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px', borderRadius: '8px', border: '1px solid #333', marginBottom: '40px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>TOTAL LIQUIDADO / ENTREGADO:</span>
+            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>TOTAL LIQUIDADO:</span>
             <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#25D366' }}>RD$ {totalComisionesPagadas.toLocaleString()}</span>
           </div>
 
@@ -294,7 +320,7 @@ export default function ReporteComisiones() {
         </div>
       ) : (
 
-        /* TABLA GENERAL */
+        /* TABLA PRINCIPAL */
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
@@ -314,7 +340,7 @@ export default function ReporteComisiones() {
           </div>
 
           {loading ? (
-            <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Cargando reporte de comisiones...</p>
+            <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Cargando catálogo y comisiones...</p>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
@@ -335,11 +361,11 @@ export default function ReporteComisiones() {
                     <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
                       <td style={{ padding: '10px' }}>{item.clienteNombre} - {item.vehiculo}</td>
                       <td style={{ padding: '10px' }}>{item.tecnicoNombre}</td>
-                      <td style={{ padding: '10px' }}>
+                      <td style={{ padding: '10px', color: '#25D366', fontWeight: 'bold' }}>
                         RD$ {(item.precioInstalacion || 0).toLocaleString()}
                       </td>
                       <td style={{ padding: '10px' }}>{item.porcentajeComision || 0}%</td>
-                      <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }}>
+                      <td style={{ padding: '10px', fontWeight: 'bold', color: '#E50914' }}>
                         RD$ {(item.montoComision || 0).toLocaleString()}
                       </td>
                       <td style={{ padding: '10px' }} className="no-print">
@@ -365,7 +391,7 @@ export default function ReporteComisiones() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                      No hay registros de instalaciones para los filtros seleccionados.
+                      No hay registros para este filtro.
                     </td>
                   </tr>
                 )}
