@@ -8,16 +8,21 @@ export default function AnaliticasDashboard() {
   const [pedidos, setPedidos] = useState([]);
   const [productos, setProductos] = useState([]);
 
-  // Métricas calculadas
+  // Métricas financieras calculadas (Solo completados)
   const [ventasTotales, setVentasTotales] = useState(0);
   const [ventasDiarias, setVentasDiarias] = useState(0);
   const [ventasSemanales, setVentasSemanales] = useState(0);
   const [ventasMensuales, setVentasMensuales] = useState(0);
+
+  // Métricas operativas y de estado
+  const [ventasPendientes, setVentasPendientes] = useState(0);
+  const [pedidosPendientesCount, setPedidosPendientesCount] = useState(0);
+  const [ticketPromedio, setTicketPromedio] = useState(0);
+  const [totalPedidosCompletadosCount, setTotalPedidosCompletadosCount] = useState(0);
+
+  // Rankings y listas
   const [productosMasVendidos, setProductosMasVendidos] = useState([]);
   const [ingresosPorZona, setIngresosPorZona] = useState({});
-  const [totalPedidosCount, setTotalPedidosCount] = useState(0);
-
-  // NUEVAS MÉTRICAS: Top Clientes e Inventario Crítico
   const [topClientes, setTopClientes] = useState([]);
   const [productosStockBajo, setProductosStockBajo] = useState([]);
 
@@ -34,7 +39,6 @@ export default function AnaliticasDashboard() {
         listaPedidos.push({ id: doc.id, ...doc.data() });
       });
       setPedidos(listaPedidos);
-      setTotalPedidosCount(listaPedidos.length);
 
       // 2. Cargar Productos (Inventario)
       const snapProductos = await getDocs(collection(db, 'productos'));
@@ -54,11 +58,36 @@ export default function AnaliticasDashboard() {
     }
   };
 
+  /**
+   * Calcula el monto neto real de un pedido teniendo en cuenta
+   * subtotal, descuento, envío o total guardado.
+   */
+  const obtenerMontoNeto = (p) => {
+    if (p.totalNeto !== undefined && !isNaN(Number(p.totalNeto))) {
+      return Number(p.totalNeto);
+    }
+
+    const subtotal = Number(p.subtotal || 0);
+    const descuento = Number(p.descuento || p.discount || 0);
+    const envio = Number(p.costoEnvio || p.envio || 0);
+
+    if (subtotal > 0) {
+      return Math.max(0, subtotal - descuento + envio);
+    }
+
+    // Fallback al campo total directo si no hay subtotal
+    return Number(p.total || 0);
+  };
+
   const calcularMetricas = (listaPedidos, listaProductos) => {
     let tTotal = 0;
     let tDiario = 0;
     let tSemanal = 0;
     let tMensual = 0;
+    let countCompletados = 0;
+
+    let tPendiente = 0;
+    let countPendientes = 0;
 
     const ahora = new Date();
     const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
@@ -77,27 +106,29 @@ export default function AnaliticasDashboard() {
     const clientesMap = {};
 
     listaPedidos.forEach((p) => {
-      const monto = Number(p.total || 0);
-      
-      // 1. EXTRAER CAMPOS CON MULTIPLES FALLBACKS
+      const montoNeto = obtenerMontoNeto(p);
+      const estadoNormalizado = (p.estado || '').toString().trim().toLowerCase();
+
+      // Es completado si el estado es completado, entregado o enviado
+      const esCompletado = ['completado', 'entregado', 'enviado'].includes(estadoNormalizado);
+      const esPendiente = ['pendiente', 'en proceso', 'por pagar', 'procesando'].includes(estadoNormalizado);
+
+      // 1. EXTRAER CLIENTE CON MULTIPLES FALLBACKS
       const rawNombre = p.nombre || p.cliente || p.clienteNombre || p.nombreCliente || p.email || '';
       const rawTelefono = p.telefono || p.clienteTelefono || p.phone || '';
 
-      // Limpiar datos
       const nombreLimpio = rawNombre.toString().trim();
       const telefonoLimpio = rawTelefono.toString().trim();
 
-      // Definir nombre visible
       const nombreMostrar = nombreLimpio || (telefonoLimpio ? `Cliente (${telefonoLimpio})` : 'Cliente Anónimo');
 
-      // Clave única para agrupar: Teléfono primero, luego nombre en minúsculas
       let clienteKey = 'anonimo';
       if (telefonoLimpio) {
         clienteKey = `tel_${telefonoLimpio}`;
       } else if (nombreLimpio) {
         clienteKey = `nom_${nombreLimpio.toLowerCase()}`;
       } else {
-        clienteKey = `order_${p.id}`; // Si no tiene nada, no agrupar a todos en 'anonimo'
+        clienteKey = `order_${p.id}`;
       }
 
       if (!clientesMap[clienteKey]) {
@@ -109,12 +140,13 @@ export default function AnaliticasDashboard() {
         };
       }
 
-      // Si el pedido no está cancelado, suma a las finanzas
-      if (p.estado !== 'Cancelado') {
-        tTotal += monto;
+      // 2. CÁLCULOS FINANCIEROS REALES (Solo órdenes COMPLETADAS)
+      if (esCompletado) {
+        countCompletados += 1;
+        tTotal += montoNeto;
 
         // Acumular gasto del cliente
-        clientesMap[clienteKey].totalGastado += monto;
+        clientesMap[clienteKey].totalGastado += montoNeto;
         clientesMap[clienteKey].pedidosCount += 1;
 
         // Procesar fecha del pedido
@@ -129,40 +161,63 @@ export default function AnaliticasDashboard() {
 
         // Diarias (hoy)
         if (tiempoPedido >= inicioHoy) {
-          tDiario += monto;
+          tDiario += montoNeto;
         }
 
         // Semanales (últimos 7 días)
         if (fechaPedido >= hace7Dias) {
-          tSemanal += monto;
+          tSemanal += montoNeto;
         }
 
         // Mensuales (mes actual)
         if (fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual) {
-          tMensual += monto;
+          tMensual += montoNeto;
         }
-      }
 
-      // Conteo de Productos más vendidos
-      if (p.productosDetalle && Array.isArray(p.productosDetalle)) {
-        p.productosDetalle.forEach((item) => {
-          const nombreProd = item.nombre || 'Producto sin nombre';
-          const cantidad = Number(item.cantidad || 1);
-          prodConteo[nombreProd] = (prodConteo[nombreProd] || 0) + cantidad;
-        });
-      } else if (p.detalles) {
-        prodConteo[p.detalles] = (prodConteo[p.detalles] || 0) + 1;
-      }
+        // Conteo por Zonas de Envío (solo de ventas reales)
+        const zona = p.zonaEnvio || p.direccion || 'No especificada';
+        zonaConteo[zona] = (zonaConteo[zona] || 0) + montoNeto;
 
-      // Conteo por Zonas de Envío
-      const zona = p.zonaEnvio || p.direccion || 'No especificada';
-      zonaConteo[zona] = (zonaConteo[zona] || 0) + Number(p.total || 0);
+        // Conteo de Productos más vendidos (solo de compras completadas)
+        if (p.productosDetalle && Array.isArray(p.productosDetalle)) {
+          p.productosDetalle.forEach((item) => {
+            const nombreProd = item.nombre || item.titulo || 'Producto sin nombre';
+            const cantidad = Number(item.cantidad || item.qty || item.count || 1);
+            prodConteo[nombreProd] = (prodConteo[nombreProd] || 0) + cantidad;
+          });
+        } else if (p.detalles) {
+          // Intentar parsear si viene como texto
+          const strDetalles = String(p.detalles);
+          const items = strDetalles.split(',');
+          items.forEach((it) => {
+            const trimmed = it.trim();
+            // Buscar patrones como "2x Producto" o "Producto x2"
+            const matchCantidad = trimmed.match(/^(\d+)\s*x\s*(.+)$/i) \vert{}\vert{} trimmed.match(/^(.+)\s*x\s*(\d+)$/i);
+            if (matchCantidad) {
+              const qty = Number(matchCantidad[1] || matchCantidad[2] || 1);
+              const name = (matchCantidad[2] || matchCantidad[1] || trimmed).trim();
+              prodConteo[name] = (prodConteo[name] || 0) + qty;
+            } else if (trimmed) {
+              prodConteo[trimmed] = (prodConteo[trimmed] || 0) + 1;
+            }
+          });
+        }
+      } else if (esPendiente) {
+        // Seguimiento de ventas en proceso
+        tPendiente += montoNeto;
+        countPendientes += 1;
+      }
     });
 
     setVentasTotales(tTotal);
     setVentasDiarias(tDiario);
     setVentasSemanales(tSemanal);
     setVentasMensuales(tMensual);
+    setVentasPendientes(tPendiente);
+    setPedidosPendientesCount(countPendientes);
+
+    setTotalPedidosCompletadosCount(countCompletados);
+    setTicketPromedio(countCompletados > 0 ? tTotal / countCompletados : 0);
 
     // Ordenar productos más vendidos (Top 5)
     const productosOrdenados = Object.keys(prodConteo)
@@ -173,14 +228,14 @@ export default function AnaliticasDashboard() {
 
     setIngresosPorZona(zonaConteo);
 
-    // PROCESAR TOP 5 CLIENTES FRECUENTES
+    // TOP 5 CLIENTES FRECUENTES
     const topClientesOrdenados = Object.values(clientesMap)
       .filter((c) => c.totalGastado > 0)
       .sort((a, b) => b.totalGastado - a.totalGastado)
       .slice(0, 5);
     setTopClientes(topClientesOrdenados);
 
-    // PROCESAR INVENTARIO CRÍTICO (Poco o Sin Stock <= 5 unidades)
+    // INVENTARIO CRÍTICO (Bajo Stock <= 5 unidades)
     const productosBajos = listaProductos
       .map((prod) => ({
         id: prod.id,
@@ -201,7 +256,7 @@ export default function AnaliticasDashboard() {
           <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#E50914', textTransform: 'uppercase', margin: 0 }}>
             📊 GR Analíticas & Reportes
           </h1>
-          <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0 0' }}>Métricas en tiempo real del negocio e inventario</p>
+          <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0 0' }}>Métricas reales basadas únicamente en órdenes completadas</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => window.location.href = '/admin/pedidos'} style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -219,9 +274,9 @@ export default function AnaliticasDashboard() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
             
-            {/* TARJETAS DE VENTAS TOTALES */}
+            {/* TARJETAS DE VENTAS REALES */}
             <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '12px' }}>💰 Resumen de Ventas (RD$)</h2>
+              <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '12px' }}>💰 Resumen de Ventas Confirmadas (RD$)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
                 
                 <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
@@ -246,13 +301,32 @@ export default function AnaliticasDashboard() {
                 </div>
 
                 <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
-                  <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Ventas Históricas Acumuladas</span>
+                  <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Ingresos Acumulados</span>
                   <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#E50914', margin: '8px 0 0 0' }}>
                     RD$ {ventasTotales.toLocaleString()}
                   </h3>
-                  <span style={{ fontSize: '11px', color: '#666' }}>Total de órdenes: {totalPedidosCount}</span>
+                  <span style={{ fontSize: '11px', color: '#666' }}>Órdenes completadas: {totalPedidosCompletadosCount}</span>
                 </div>
 
+              </div>
+            </div>
+
+            {/* TARJETAS DE OPERACIÓN (EN PROCESO & TICKET PROMEDIO) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+              <div style={{ backgroundColor: '#141414', border: '1px solid #332d18', borderRadius: '10px', padding: '18px' }}>
+                <span style={{ fontSize: '12px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>⏳ Ventas Pendientes / Por Cobrar</span>
+                <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#FFB800', margin: '6px 0 0 0' }}>
+                  RD$ {ventasPendientes.toLocaleString()}
+                </h3>
+                <span style={{ fontSize: '11px', color: '#888' }}>{pedidosPendientesCount} orden(es) en estado pendiente</span>
+              </div>
+
+              <div style={{ backgroundColor: '#141414', border: '1px solid #1f2b38', borderRadius: '10px', padding: '18px' }}>
+                <span style={{ fontSize: '12px', color: '#00B0FF', textTransform: 'uppercase', fontWeight: 'bold' }}>🛒 Ticket Promedio</span>
+                <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#00B0FF', margin: '6px 0 0 0' }}>
+                  RD$ {Math.round(ticketPromedio).toLocaleString()}
+                </h3>
+                <span style={{ fontSize: '11px', color: '#888' }}>Gasto promedio por cada orden completada</span>
               </div>
             </div>
 
@@ -274,7 +348,7 @@ export default function AnaliticasDashboard() {
                           </span>
                           <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{prod.nombre}</span>
                         </div>
-                        <span style={{ fontSize: '12px', color: '#25D366', fontWeight: 'bold' }}>{prod.cantidad} unidades</span>
+                        <span style={{ fontSize: '12px', color: '#25D366', fontWeight: 'bold' }}>{prod.cantidad} unid.</span>
                       </div>
                     ))}
                   </div>
@@ -285,7 +359,7 @@ export default function AnaliticasDashboard() {
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>📍 Ingresos por Zonas de Envío</h2>
                 {Object.keys(ingresosPorZona).length === 0 ? (
-                  <p style={{ color: '#666', fontSize: '13px' }}>No hay registros de zonas de envío.</p>
+                  <p style={{ color: '#666', fontSize: '13px' }}>No hay registros de zonas de envío completadas.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '220px', overflowY: 'auto' }}>
                     {Object.entries(ingresosPorZona).map(([zona, monto], index) => (
@@ -307,14 +381,14 @@ export default function AnaliticasDashboard() {
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>👥 Top 5 Clientes Frecuentes (VIP)</h2>
                 {topClientes.length === 0 ? (
-                  <p style={{ color: '#666', fontSize: '13px' }}>Aún no hay compras registradas de clientes.</p>
+                  <p style={{ color: '#666', fontSize: '13px' }}>Aún no hay compras completadas de clientes.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {topClientes.map((cliente, index) => (
                       <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1A1A1A', padding: '10px 12px', borderRadius: '6px', border: '1px solid #252525' }}>
                         <div>
                           <p style={{ fontSize: '13px', fontWeight: 'bold', margin: 0 }}>{index + 1}. {cliente.nombre}</p>
-                          <span style={{ fontSize: '11px', color: '#888' }}>{cliente.pedidosCount} orden(es) realizada(s)</span>
+                          <span style={{ fontSize: '11px', color: '#888' }}>{cliente.pedidosCount} orden(es) completada(s)</span>
                         </div>
                         <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#25D366' }}>
                           RD$ {cliente.totalGastado.toLocaleString()}
