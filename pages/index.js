@@ -200,7 +200,10 @@ export default function Home() {
       const horasOcupadas = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        if (data.horaCita) horasOcupadas.push(data.horaCita);
+        // Ignorar citas canceladas para liberar la disponibilidad
+        if (data.estado !== 'Cancelado' && data.horaCita) {
+          horasOcupadas.push(data.horaCita);
+        }
       });
       setCitasOcupadas(horasOcupadas);
     } catch (err) {
@@ -218,6 +221,32 @@ export default function Home() {
     }
 
     setEnviando(true);
+
+    // VALIDACIÓN DE RESPALDO: Verificar que el turno siga disponible
+    if (tieneInstalacionSeleccionada) {
+      try {
+        const qVerificacion = query(
+          collection(db, 'pedidos'),
+          where('fechaCita', '==', cliente.fechaCita),
+          where('horaCita', '==', cliente.horaCita)
+        );
+        const snapVerificacion = await getDocs(qVerificacion);
+        
+        const citaExistente = snapVerificacion.docs.some(
+          (doc) => doc.data().estado !== 'Cancelado'
+        );
+
+        if (citaExistente) {
+          setEnviando(false);
+          return alert(
+            "⚠️ Lo sentimos, este horario acaba de ser reservado. Por favor selecciona otro turno u otra fecha."
+          );
+        }
+      } catch (err) {
+        console.error("Error al validar disponibilidad previa:", err);
+      }
+    }
+
     const orderId = 'GR-' + Math.floor(100000 + Math.random() * 900000);
     const cartSummary = cart.map((i) => `${i.nombre} (x${i.cantidad})${i.incluirInstalacion ? ' [Con Instalación]' : ''}`).join(', ');
 
@@ -330,7 +359,6 @@ export default function Home() {
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
       {/* Toast Notificación */}
-      {/* Toast Notificación Estilizado */}
       {toastMsg && (
         <div style={{
           position: 'fixed',
@@ -353,7 +381,7 @@ export default function Home() {
           gap: '10px',
           animation: 'fadeIn 0.3s ease-in-out'
         }}>
-          <span style={{ color: '#25D366', fontSize: '16px' }}>✓</span>
+          <span style={{ color: '#25D366', fontSize: '16px' }}></span>
           <span>{toastMsg}</span>
         </div>
       )}
@@ -522,7 +550,7 @@ export default function Home() {
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF', margin: 0 }}>Tu Carrito de Compras</h2>
-                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}></button>
               </div>
 
               {cart.length === 0 ? (
@@ -559,7 +587,7 @@ export default function Home() {
                             >
                               +
                             </button>
-                            <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}>✕</button>
+                            <button onClick={() => removeFromCart(item.id)} style={{ backgroundColor: 'transparent', color: '#ff4d4d', border: 'none', cursor: 'pointer', marginLeft: '5px' }}></button>
                           </div>
                         </div>
 
@@ -606,7 +634,7 @@ export default function Home() {
       {isCheckoutOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 50, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '25px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}></button>
 
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#E50914', marginBottom: '15px' }}>Completar Pedido</h2>
 
