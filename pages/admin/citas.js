@@ -1,5 +1,5 @@
 // pages/admin/citas.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -10,6 +10,7 @@ export default function CitasAdmin() {
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState('TODAS'); // 'TODAS', 'PENDIENTES', 'COMPLETADAS'
+  const [filtroFecha, setFiltroFecha] = useState('TODAS'); // 'TODAS' o fecha específica 'YYYY-MM-DD'
 
   // Estado para el formulario de cita manual
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -62,6 +63,12 @@ export default function CitasAdmin() {
     }
   };
 
+  // Obtener lista única y ordenada de fechas (Sábados disponibles)
+  const listaFechasSabados = useMemo(() => {
+    const fechasUnicas = Array.from(new Set(citas.map((c) => c.fechaCita).filter(Boolean)));
+    return fechasUnicas.sort();
+  }, [citas]);
+
   // Cambiar estado de la cita (Pendiente / Completada)
   const cambiarEstadoCita = async (idPedido, nuevoEstado) => {
     try {
@@ -76,7 +83,7 @@ export default function CitasAdmin() {
     }
   };
 
-  // Crear una cita manual guardando AMBOS formatos para evitar fallos de lectura
+  // Crear una cita manual guardando AMBOS formatos
   const crearCitaManual = async (e) => {
     e.preventDefault();
     if (!nuevaCita.cliente || !nuevaCita.fechaInstalacion) {
@@ -90,7 +97,6 @@ export default function CitasAdmin() {
         telefono: nuevaCita.telefono,
         detalles: nuevaCita.detalles,
         estadoCita: 'Pendiente',
-        // 🚨 Guardamos con ambos nombres para que sea compatible con index.js y citas.js
         fechaInstalacion: nuevaCita.fechaInstalacion,
         horaInstalacion: nuevaCita.horaInstalacion,
         fechaCita: nuevaCita.fechaInstalacion,
@@ -108,16 +114,22 @@ export default function CitasAdmin() {
         horaInstalacion: '1:00 PM',
         detalles: 'Instalación Manual Admin'
       });
-      cargarCitas(); // Recargar la lista
+      cargarCitas();
     } catch (error) {
       console.error("Error al guardar la cita manual:", error);
       alert("Hubo un error al guardar la cita.");
     }
   };
 
+  // Filtrar citas por estado y por fecha seleccionada
   const citasFiltradas = citas.filter((c) => {
-    if (filtroEstado === 'PENDIENTES') return c.estadoCita === 'Pendiente';
-    if (filtroEstado === 'COMPLETADAS') return c.estadoCita === 'Completada';
+    // Filtro de Estado
+    if (filtroEstado === 'PENDIENTES' && c.estadoCita !== 'Pendiente') return false;
+    if (filtroEstado === 'COMPLETADAS' && c.estadoCita !== 'Completada') return false;
+
+    // Filtro por Fecha de Sábado
+    if (filtroFecha !== 'TODAS' && c.fechaCita !== filtroFecha) return false;
+
     return true;
   });
 
@@ -139,25 +151,53 @@ export default function CitasAdmin() {
             <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#888' }}>Organiza las instalaciones en el taller para el técnico y los clientes.</p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            
+            {/* 📅 FILTRO DE BÚSQUEDA POR SÁBADO */}
+            <select
+              value={filtroFecha}
+              onChange={(e) => setFiltroFecha(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #FFB800',
+                backgroundColor: '#141414',
+                color: '#FFB800',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="TODAS">📅 Todos los Sábados</option>
+              {listaFechasSabados.map((fecha) => (
+                <option key={fecha} value={fecha}>
+                  Sábado: {fecha}
+                </option>
+              ))}
+            </select>
+
             <button
               onClick={() => setMostrarModal(true)}
               style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E50914', color: '#FFF', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
             >
               ➕ Cita Manual
             </button>
+
             <button
               onClick={() => setFiltroEstado('TODAS')}
               style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #333', backgroundColor: filtroEstado === 'TODAS' ? '#E50914' : '#141414', color: '#FFF', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
             >
               Todas ({citas.length})
             </button>
+
             <button
               onClick={() => setFiltroEstado('PENDIENTES')}
               style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #FFB800', backgroundColor: filtroEstado === 'PENDIENTES' ? '#FFB800' : '#141414', color: filtroEstado === 'PENDIENTES' ? '#000' : '#FFB800', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
             >
               Pendientes
             </button>
+
             <button
               onClick={() => setFiltroEstado('COMPLETADAS')}
               style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #25D366', backgroundColor: filtroEstado === 'COMPLETADAS' ? '#25D366' : '#141414', color: filtroEstado === 'COMPLETADAS' ? '#000' : '#25D366', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -228,7 +268,7 @@ export default function CitasAdmin() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
             {citasFiltradas.length === 0 ? (
               <p style={{ color: '#888', gridColumn: '1 / -1', textAlign: 'center', padding: '30px', backgroundColor: '#141414', borderRadius: '8px', border: '1px solid #222' }}>
-                No hay citas agendadas en esta categoría.
+                No hay citas agendadas para la selección actual.
               </p>
             ) : (
               citasFiltradas.map((c) => {
@@ -245,7 +285,7 @@ export default function CitasAdmin() {
                       padding: '18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      justify: 'space-between'
+                      justifyContent: 'space-between'
                     }}
                   >
                     <div>
