@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { db } from '../../firebase/config'; // Ajusta la ruta a tu config de Firebase
+import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function ReporteComisiones() {
+  // ... resto del código del componente
+}
   const [citasCompletadas, setCitasCompletadas] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
 
