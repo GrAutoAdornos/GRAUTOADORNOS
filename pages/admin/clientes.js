@@ -9,7 +9,7 @@ export default function ClientesAdmin() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
-  const [filtroEstado, setFiltroEstado] = useState('TODOS'); // 'TODOS', 'PENDIENTES', 'CONTACTADOS'
+  const [filtroEstado, setFiltroEstado] = useState('TODOS');
   const [busqueda, setBusqueda] = useState('');
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
@@ -21,6 +21,91 @@ export default function ClientesAdmin() {
     cargarClientesYHistorial();
   }, [router]);
 
+  // Función auxiliar para extraer el Nombre sin importar cómo esté en Firebase
+  const extraerNombre = (data) => {
+    if (!data) return null;
+    
+    // 1. Si está dentro del objeto cliente
+    if (data.cliente && typeof data.cliente === 'object') {
+      const c = data.cliente;
+      if (c.nombre) return c.nombre;
+      if (c.name) return c.name;
+      if (c.fullName) return c.fullName;
+      if (c.nombreCliente) return c.nombreCliente;
+    }
+    
+    // 2. Si cliente es directamente un string/texto
+    if (typeof data.cliente === 'string' && data.cliente.trim() !== '') {
+      return data.cliente;
+    }
+
+    // 3. Revisar campos raíz directos del documento de pedido
+    if (data.nombreCliente) return data.nombreCliente;
+    if (data.clienteNombre) return data.clienteNombre;
+    if (data.nombre_cliente) return data.nombre_cliente;
+    if (data.nombre) return data.nombre;
+    if (data.name) return data.name;
+    if (data.fullName) return data.fullName;
+    if (data.comprador) return data.comprador;
+    if (data.usuario) return data.usuario;
+    if (data.displayName) return data.displayName;
+    if (data.email) return data.email;
+
+    // 4. Si los datos del cliente vinieron dentro de enví­o/shipping/datos
+    if (data.envio && typeof data.envio === 'object') {
+      if (data.envio.nombre) return data.envio.nombre;
+      if (data.envio.nombreCliente) return data.envio.nombreCliente;
+    }
+    if (data.datos && typeof data.datos === 'object') {
+      if (data.datos.nombre) return data.datos.nombre;
+    }
+
+    return 'Cliente Sin Nombre';
+  };
+
+  // Función auxiliar para extraer el Teléfono
+  const extraerTelefono = (data) => {
+    if (!data) return 'Sin Teléfono';
+
+    if (data.cliente && typeof data.cliente === 'object') {
+      const c = data.cliente;
+      if (c.telefono || c.phone || c.celular || c.tel) {
+        return c.telefono || c.phone || c.celular || c.tel;
+      }
+    }
+
+    return (
+      data.telefono || 
+      data.phone || 
+      data.celular || 
+      data.tel || 
+      data.whatsapp || 
+      (data.envio && (data.envio.telefono || data.envio.phone)) ||
+      'Sin Teléfono'
+    );
+  };
+
+  // Función auxiliar para extraer la Dirección
+  const extraerDireccion = (data) => {
+    if (!data) return 'Dirección no registrada';
+
+    if (data.cliente && typeof data.cliente === 'object') {
+      const c = data.cliente;
+      if (c.direccion || c.sector || c.address) {
+        return c.direccion || c.sector || c.address;
+      }
+    }
+
+    return (
+      data.direccion || 
+      data.sector || 
+      data.address || 
+      data.ubicacion || 
+      (data.envio && (data.envio.direccion || data.envio.sector)) ||
+      'Dirección no registrada'
+    );
+  };
+
   const cargarClientesYHistorial = async () => {
     setLoading(true);
     try {
@@ -31,40 +116,19 @@ export default function ClientesAdmin() {
         const data = documento.data();
         const idPedido = documento.id;
 
-        // Búsqueda exhaustiva de Nombre (Anidado u Opciones directas)
-        const nombreCliente = 
-          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre || data.cliente.name : null) ||
-          (typeof data.cliente === 'string' ? data.cliente : null) ||
-          data.nombreCliente || 
-          data.nombre || 
-          data.name || 
-          data.customer || 
-          'Cliente Sin Nombre';
-
-        // Búsqueda exhaustiva de Teléfono
-        const telefono = 
-          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.telefono || data.cliente.phone : null) ||
-          data.telefono || 
-          data.phone || 
-          data.celular || 
-          data.tel || 
-          'Sin Teléfono';
-
-        // Búsqueda exhaustiva de Dirección
-        const direccion = 
-          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.direccion || data.cliente.sector : null) ||
-          data.direccion || 
-          data.sector || 
-          data.address || 
-          'Dirección no registrada';
+        const nombreCliente = extraerNombre(data);
+        const telefono = extraerTelefono(data);
+        const direccion = extraerDireccion(data);
 
         const fechaPedido = data.fecha ? (data.fecha.toDate ? data.fecha.toDate() : new Date(data.fecha)) : new Date();
-        const totalPedido = Number(data.total ?? data.monto ?? 0);
+        const totalPedido = Number(data.total ?? data.monto ?? data.totalPago ?? 0);
         
         // Extracción de Productos
         let detalles = 'Sin detalle de productos';
         if (Array.isArray(data.productos)) {
-          detalles = data.productos.map(p => `${p.cantidad || 1}x ${p.titulo || p.nombre || 'Producto'}`).join(', ');
+          detalles = data.productos.map(p => `${p.cantidad || 1}x ${p.titulo || p.nombre || p.title || 'Producto'}`).join(', ');
+        } else if (Array.isArray(data.items)) {
+          detalles = data.items.map(p => `${p.cantidad || 1}x ${p.titulo || p.nombre || 'Producto'}`).join(', ');
         } else if (data.detalles) {
           detalles = String(data.detalles);
         } else if (typeof data.productos === 'string') {
@@ -73,7 +137,7 @@ export default function ClientesAdmin() {
 
         const contactado = Boolean(data.fidelizacionContactado ?? false);
 
-        // Clave única para agrupar las compras por cliente
+        // Agrupar por teléfono o nombre para no duplicar clientes
         const claveUnica = (telefono !== 'Sin Teléfono') 
           ? telefono 
           : (nombreCliente !== 'Cliente Sin Nombre' ? nombreCliente : idPedido);
@@ -88,10 +152,14 @@ export default function ClientesAdmin() {
             contactado: contactado,
             historialCompras: []
           };
+        } else {
+          // Si antes no tenía nombre pero en otro pedido sí, actualizamos el nombre
+          if (mapaClientes[claveUnica].nombre === 'Cliente Sin Nombre' && nombreCliente !== 'Cliente Sin Nombre') {
+            mapaClientes[claveUnica].nombre = nombreCliente;
+          }
         }
 
         mapaClientes[claveUnica].totalInvertido += totalPedido;
-
         if (contactado) mapaClientes[claveUnica].contactado = true;
 
         mapaClientes[claveUnica].historialCompras.push({
@@ -111,7 +179,6 @@ export default function ClientesAdmin() {
     }
   };
 
-  // Marcar como contactado en Firebase y abrir WhatsApp
   const marcarYEnviarWhatsapp = async (cliente) => {
     try {
       if (cliente.idDocUltimoPedido) {
@@ -126,7 +193,8 @@ export default function ClientesAdmin() {
       );
 
       const telLimpio = String(cliente.telefono).replace(/\D/g, '');
-      const mensaje = `Hola ${cliente.nombre}, ¡saludos de GR Auto Adornos! 🚗✨ Queríamos saber cómo te va con tus productos y si necesitas algún accesorio o servicio adicional. ¡Estamos a tu orden!`;
+      const nombreSaludo = cliente.nombre !== 'Cliente Sin Nombre' ? cliente.nombre : 'estimado/a cliente';
+      const mensaje = `Hola ${nombreSaludo}, ¡saludos de GR Auto Adornos! 🚗✨ Queríamos saber cómo te va con tus productos y si necesitas algún accesorio o servicio adicional. ¡Estamos a tu orden!`;
       const urlWhatsapp = `https://wa.me/1${telLimpio}?text=${encodeURIComponent(mensaje)}`;
 
       window.open(urlWhatsapp, '_blank');
@@ -135,7 +203,6 @@ export default function ClientesAdmin() {
     }
   };
 
-  // FILTRADO INTELIGENTE (Por Estado + Búsqueda por Nombre o Teléfono)
   const clientesFiltrados = clientes.filter((c) => {
     let cumpleEstado = true;
     if (filtroEstado === 'PENDIENTES') cumpleEstado = !c.contactado;
@@ -155,7 +222,7 @@ export default function ClientesAdmin() {
       <header style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '18px', fontWeight: '900' }}>
-            GR <span style={{ color: '#E50914' }}>CRM & BÚSQUEDA RÁPIDA</span>
+            GR <span style={{ color: '#E50914' }}>CRM & CLIENTES</span>
           </span>
           <Link href="/admin/dashboard" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>
             Volver al Panel
@@ -164,16 +231,16 @@ export default function ClientesAdmin() {
       </header>
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '25px 20px' }}>
-        <h2 style={{ fontSize: '22px', marginBottom: '10px' }}>Base de Clientes & Búsqueda Rápida</h2>
+        <h2 style={{ fontSize: '22px', marginBottom: '10px' }}>Base de Clientes & Historial</h2>
         <p style={{ color: '#888', fontSize: '13px', marginBottom: '20px' }}>
-          Busca instantáneamente por nombre o número de teléfono, revisa su historial y gestiona el seguimiento.
+          Gestión inteligente de contactos, búsquedas rápidas y seguimiento post-venta por WhatsApp.
         </p>
 
-        {/* BARRA DE BÚSQUEDA RÁPIDA GLOBAL */}
+        {/* BUSCADOR */}
         <div style={{ marginBottom: '20px' }}>
           <input
             type="text"
-            placeholder="🔍 Buscar cliente por nombre o teléfono (ej: Juan, 809...)"
+            placeholder="🔍 Buscar cliente por nombre o teléfono..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{
@@ -189,7 +256,7 @@ export default function ClientesAdmin() {
           />
         </div>
 
-        {/* BARRA DE FILTROS DE ESTADO */}
+        {/* FILTROS */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setFiltroEstado('TODOS')}
@@ -219,7 +286,7 @@ export default function ClientesAdmin() {
               fontSize: '13px'
             }}
           >
-            ⏳ Pendientes de Mensaje ({clientes.filter((c) => !c.contactado).length})
+            ⏳ Pendientes ({clientes.filter((c) => !c.contactado).length})
           </button>
           <button
             onClick={() => setFiltroEstado('CONTACTADOS')}
@@ -234,20 +301,20 @@ export default function ClientesAdmin() {
               fontSize: '13px'
             }}
           >
-            ✅ Ya Contactados ({clientes.filter((c) => c.contactado).length})
+            ✅ Contactados ({clientes.filter((c) => c.contactado).length})
           </button>
         </div>
 
         {loading ? (
-          <p style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Cargando clientes y pedidos...</p>
+          <p style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Cargando datos de Firebase...</p>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: clienteSeleccionado ? '1.2fr 1fr' : '1fr', gap: '20px' }}>
             
-            {/* LISTA DE CLIENTES */}
+            {/* LISTA */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {clientesFiltrados.length === 0 ? (
                 <p style={{ color: '#888', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #222', textAlign: 'center' }}>
-                  No se encontraron clientes con esos criterios de búsqueda.
+                  No se encontraron clientes.
                 </p>
               ) : (
                 clientesFiltrados.map((cliente, index) => (
@@ -259,7 +326,7 @@ export default function ClientesAdmin() {
                       borderRadius: '10px',
                       padding: '16px',
                       display: 'flex',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       flexWrap: 'wrap',
                       gap: '12px'
@@ -322,7 +389,7 @@ export default function ClientesAdmin() {
               )}
             </div>
 
-            {/* HISTORIAL Y DETALLES DEL CLIENTE SELECCIONADO */}
+            {/* DETALLES DE COMPRAS */}
             {clienteSeleccionado && (
               <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '10px', padding: '20px', position: 'sticky', top: '20px', height: 'fit-content' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222', paddingBottom: '10px', marginBottom: '15px' }}>
@@ -338,14 +405,14 @@ export default function ClientesAdmin() {
                 </div>
 
                 <div style={{ fontSize: '13px', marginBottom: '15px', color: '#CCC' }}>
-                  <p style={{ margin: '3px 0' }}><strong>📞 WhatsApp:</strong> {clienteSeleccionado.telefono}</p>
-                  <p style={{ margin: '3px 0' }}><strong>📍 Ubicación:</strong> {clienteSeleccionado.direccion}</p>
+                  <p style={{ margin: '3px 0' }}><strong>📞 Teléfono:</strong> {clienteSeleccionado.telefono}</p>
+                  <p style={{ margin: '3px 0' }}><strong>📍 Dirección:</strong> {clienteSeleccionado.direccion}</p>
                   <p style={{ margin: '3px 0', color: '#25D366' }}>
                     <strong>Total acumulado:</strong> RD$ {clienteSeleccionado.totalInvertido.toLocaleString()}
                   </p>
                 </div>
 
-                <h4 style={{ fontSize: '13px', color: '#AAA', marginBottom: '10px' }}>Productos Comprados Anteriormente:</h4>
+                <h4 style={{ fontSize: '13px', color: '#AAA', marginBottom: '10px' }}>Órdenes Registradas:</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' }}>
                   {clienteSeleccionado.historialCompras.map((compra, i) => (
                     <div key={i} style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222' }}>
