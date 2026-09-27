@@ -53,6 +53,14 @@ export default function MetricasAdmin() {
     let listaPedidosDesglose = [];
 
     pedidos.forEach((p) => {
+      // FILTRO: Solo tomamos en cuenta pedidos completados / entregados / enviados
+      const estadoNormalizado = (p.estado || '').toString().trim().toLowerCase();
+      const esCompletado = ['completado', 'entregado', 'enviado'].includes(estadoNormalizado);
+
+      if (!esCompletado) {
+        return; // Ignorar pedidos pendientes o cancelados
+      }
+
       let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
       const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
@@ -225,7 +233,7 @@ export default function MetricasAdmin() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#141414', padding: '15px 20px', borderRadius: '10px', marginBottom: '25px', border: '1px solid #222', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '16px' }}>Seleccionar Período Mes</h3>
-            <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>Compara tus ganancias y pagos con el mes anterior</p>
+            <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>Compara tus ganancias y pagos con el mes anterior (Solo órdenes completadas)</p>
           </div>
           <input
             type="month"
@@ -350,7 +358,7 @@ export default function MetricasAdmin() {
                     <tbody>
                       {pedidosDesglose.length === 0 ? (
                         <tr>
-                          <td colSpan="7" style={{ padding: '15px', textAlign: 'center', color: '#888' }}>No hay ventas registradas en este mes.</td>
+                          <td colSpan="7" style={{ padding: '15px', textAlign: 'center', color: '#888' }}>No hay ventas completadas registradas en este mes.</td>
                         </tr>
                       ) : (
                         pedidosDesglose.map((item, index) => (
@@ -395,7 +403,7 @@ export default function MetricasAdmin() {
               </div>
             )}
 
-            {/* BALANCE EXPLICADO PASO A PASO (SIN ENREDOS CONTABLES) */}
+            {/* BALANCE EXPLICADO PASO A PASO */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
 
               {/* ¿De dónde sale tu dinero? */}
@@ -432,7 +440,7 @@ export default function MetricasAdmin() {
                 </div>
               </div>
 
-              {/* MÁSFÁCIL PARA TI: DATOS DE CONTROL RÁPIDO */}
+              {/* DATOS DE CONTROL RÁPIDO */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #222', paddingBottom: '10px', color: '#FFF' }}>
