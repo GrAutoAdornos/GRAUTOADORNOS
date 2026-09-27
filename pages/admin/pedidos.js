@@ -60,14 +60,24 @@ export default function HistorialPedidos() {
         const data = documento.data();
         list.push({ id: documento.id, ...data });
 
-        // Extraer y agrupar clientes para la lista desplegable de clientes existentes
-        const nombre = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre : null) ||
-                       data.clienteNombre || data.cliente || data.nombre || 'Cliente Sin Nombre';
-        const tel = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.telefono : null) ||
-                    data.telefono || data.phone || data.celular || 'Sin Teléfono';
-        const email = data.correo || data.email || '';
-        const dir = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.direccion : null) ||
-                    data.direccion || '';
+        // Extraer datos soportando la estructura de la web (clienteNombre, clienteTelefono, clienteEmail)
+        const nombre = data.clienteNombre || 
+                       (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre : data.cliente) || 
+                       'Cliente Sin Nombre';
+
+        const tel = data.clienteTelefono || 
+                    data.telefono || 
+                    data.phone || 
+                    data.celular || 
+                    (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.telefono : 'Sin Teléfono');
+
+        const email = data.clienteEmail || 
+                      data.correo || 
+                      data.email || 
+                      (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.email : '');
+
+        const dir = data.direccion || 
+                    (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.direccion : '');
 
         const clave = tel !== 'Sin Teléfono' ? tel : nombre;
 
@@ -90,7 +100,7 @@ export default function HistorialPedidos() {
       setLoading(false);
     }
   };
-
+  
   const cargarInventario = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, 'productos'));
