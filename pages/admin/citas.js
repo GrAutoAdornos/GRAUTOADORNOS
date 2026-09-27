@@ -5,16 +5,24 @@ import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
+// Lista de instaladores/técnicos registrados
+const LISTA_TECNICOS = [
+  { id: 't1', nombre: 'Carlos López', porcentaje: 20 },
+  { id: 't2', nombre: 'Marcos Ramírez', porcentaje: 25 },
+  { id: 't3', nombre: 'Juan Pérez', porcentaje: 20 },
+];
+
 export default function CitasAdmin() {
   const router = useRouter();
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState('TODAS'); // 'TODAS', 'PENDIENTES', 'COMPLETADAS'
-  const [filtroFecha, setFiltroFecha] = useState('TODAS'); // 'TODAS' o fecha específica 'YYYY-MM-DD'
-  // Función para imprimir citas
-const exportarCitasPDF = () => {
-  window.print();
-};
+  const [filtroFecha, setFiltroFecha] = useState('TODAS');
+
+  // Función para imprimir citas a PDF
+  const exportarCitasPDF = () => {
+    window.print();
+  };
 
   // Estado para el formulario de cita manual
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -23,7 +31,9 @@ const exportarCitasPDF = () => {
     telefono: '',
     fechaInstalacion: '',
     horaInstalacion: '1:00 PM',
-    detalles: 'Instalación Manual Admin'
+    detalles: 'Instalación Manual Admin',
+    tecnicoId: 't1',
+    precioManoObra: 0,
   });
 
   useEffect(() => {
@@ -41,8 +51,6 @@ const exportarCitasPDF = () => {
       const list = [];
       snap.forEach((d) => {
         const data = d.data();
-        
-        // 🚨 NORMALIZACIÓN: Verificamos ambas opciones (fechaInstalacion o fechaCita)
         const fecha = data.fechaInstalacion || data.fechaCita;
         const hora = data.horaInstalacion || data.horaCita;
 
@@ -55,6 +63,9 @@ const exportarCitasPDF = () => {
             estadoCita: data.estadoCita || 'Pendiente',
             fechaCita: fecha,
             horaCita: hora || 'Hora por definir',
+            tecnicoNombre: data.tecnicoNombre || 'Sin asignar',
+            precioManoObra: data.precioManoObra || 0,
+            montoComision: data.montoComision || 0,
             ...data 
           });
         }
@@ -67,14 +78,15 @@ const exportarCitasPDF = () => {
     }
   };
 
-  // Obtener lista única y ordenada de fechas (Sábados disponibles)
+  // Obtener lista única y ordenada de fechas
   const listaFechasSabados = useMemo(() => {
     const fechasUnicas = Array.from(new Set(citas.map((c) => c.fechaCita).filter(Boolean)));
     return fechasUnicas.sort();
   }, [citas]);
 
   // Cambiar estado de la cita (Pendiente / Completada)
-  const cambiarEstadoCita = async (idPedido, nuevoEstado) => {
+  const cambiarEstadoCita = async (idPedido, estadoActual) => {
+    const nuevoEstado = estadoActual === 'Completada' ? 'Pendiente' : 'Completada';
     try {
       const refPedido = doc(db, 'pedidos', idPedido);
       await updateDoc(refPedido, { estadoCita: nuevoEstado });
@@ -87,7 +99,7 @@ const exportarCitasPDF = () => {
     }
   };
 
-  // Crear una cita manual guardando AMBOS formatos
+  // Crear cita manual calculando automáticamente la comisión del técnico
   const crearCitaManual = async (e) => {
     e.preventDefault();
     if (!nuevaCita.cliente || !nuevaCita.fechaInstalacion) {
@@ -96,6 +108,10 @@ const exportarCitasPDF = () => {
     }
 
     try {
+      const tecnicoObj = LISTA_TECNICOS.find((t) => t.id === nuevaCita.tecnicoId) || LISTA_TECNICOS[0];
+      const manoObra = Number(nuevaCita.precioManoObra) || 0;
+      const comisionCalculada = (manoObra * tecnicoObj.porcentaje) / 100;
+
       const nuevoDoc = {
         cliente: nuevaCita.cliente,
         telefono: nuevaCita.telefono,
@@ -105,18 +121,25 @@ const exportarCitasPDF = () => {
         horaInstalacion: nuevaCita.horaInstalacion,
         fechaCita: nuevaCita.fechaInstalacion,
         horaCita: nuevaCita.horaInstalacion,
+        tecnicoId: tecnicoObj.id,
+        tecnicoNombre: tecnicoObj.nombre,
+        porcentajeComision: tecnicoObj.porcentaje,
+        precioManoObra: manoObra,
+        montoComision: comisionCalculada,
         creadoEn: new Date().toISOString()
       };
 
       await addDoc(collection(db, 'pedidos'), nuevoDoc);
-      alert("¡Cita manual registrada con éxito!");
+      alert("¡Cita manual asignada con éxito!");
       setMostrarModal(false);
       setNuevaCita({
         cliente: '',
         telefono: '',
         fechaInstalacion: '',
         horaInstalacion: '1:00 PM',
-        detalles: 'Instalación Manual Admin'
+        detalles: 'Instalación Manual Admin',
+        tecnicoId: 't1',
+        precioManoObra: 0,
       });
       cargarCitas();
     } catch (error) {
@@ -125,21 +148,28 @@ const exportarCitasPDF = () => {
     }
   };
 
-  // Filtrar citas por estado y por fecha seleccionada
+  // Filtrar citas
   const citasFiltradas = citas.filter((c) => {
-    // Filtro de Estado
     if (filtroEstado === 'PENDIENTES' && c.estadoCita !== 'Pendiente') return false;
     if (filtroEstado === 'COMPLETADAS' && c.estadoCita !== 'Completada') return false;
-
-    // Filtro por Fecha de Sábado
     if (filtroFecha !== 'TODAS' && c.fechaCita !== filtroFecha) return false;
-
     return true;
   });
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <header style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
+      
+      {/* 🖨️ ESTILOS EXCLUSIVOS PARA IMPRESIÓN Y PDF */}
+      <style jsx global>{`
+        @media print {
+          body { background-color: #FFF !important; color: #000 !important; }
+          header, nav, button, select, .no-print { display: none !important; }
+          .card-cita { border: 1px solid #CCC !important; color: #000 !important; background-color: #FFF !important; }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <header className="no-print" style={{ backgroundColor: '#000', borderBottom: '2px solid #E50914', padding: '15px 20px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '18px', fontWeight: '900' }}>GR <span style={{ color: '#E50914' }}>CITAS E INSTALACIONES</span></span>
           <Link href="/admin/dashboard" style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none' }}>
@@ -155,9 +185,7 @@ const exportarCitasPDF = () => {
             <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#888' }}>Organiza las instalaciones en el taller para el técnico y los clientes.</p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            
-            {/* 📅 FILTRO DE BÚSQUEDA POR SÁBADO */}
+          <div className="no-print" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <select
               value={filtroFecha}
               onChange={(e) => setFiltroFecha(e.target.value)}
@@ -208,20 +236,21 @@ const exportarCitasPDF = () => {
             >
               Completadas
             </button>
-          <button
-  onClick={exportarCitasPDF}
-  style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
->
-  🖨️ Imprimir Citas (PDF)
-</button>
+
+            <button
+              onClick={exportarCitasPDF}
+              style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #555', padding: '6px 12px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}
+            >
+              🖨️ Imprimir Citas (PDF)
+            </button>
           </div>
         </div>
 
-        {/* Modal de Agendar Cita Manual */}
+        {/* MODAL CITA MANUAL Y ASIGNACIÓN DE TÉCNICO */}
         {mostrarModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-            <div style={{ backgroundColor: '#141414', padding: '25px', borderRadius: '10px', width: '100%', maxWidth: '400px', border: '1px solid #E50914' }}>
-              <h3 style={{ margin: '0 0 15px 0', color: '#FFF' }}>Agendar Cita Manual</h3>
+          <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div style={{ backgroundColor: '#141414', padding: '25px', borderRadius: '10px', width: '100%', maxWidth: '420px', border: '1px solid #E50914' }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#FFF' }}>Agendar Cita / Asignar Técnico</h3>
               <form onSubmit={crearCitaManual} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <input
                   type="text"
@@ -238,27 +267,56 @@ const exportarCitasPDF = () => {
                   onChange={(e) => setNuevaCita({ ...nuevaCita, telefono: e.target.value })}
                   style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
                 />
-                <input
-                  type="date"
-                  value={nuevaCita.fechaInstalacion}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, fechaInstalacion: e.target.value })}
-                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
-                  required
-                />
+                
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="date"
+                    value={nuevaCita.fechaInstalacion}
+                    onChange={(e) => setNuevaCita({ ...nuevaCita, fechaInstalacion: e.target.value })}
+                    style={{ flex: 1, padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                    required
+                  />
+                  <select
+                    value={nuevaCita.horaInstalacion}
+                    onChange={(e) => setNuevaCita({ ...nuevaCita, horaInstalacion: e.target.value })}
+                    style={{ flex: 1, padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                  >
+                    <option value="1:00 PM">1:00 PM</option>
+                    <option value="4:00 PM">4:00 PM</option>
+                  </select>
+                </div>
+
+                {/* Seleccionar Técnico */}
+                <label style={{ fontSize: '12px', color: '#AAA', marginBottom: '-6px' }}>Técnico Asignado:</label>
                 <select
-                  value={nuevaCita.horaInstalacion}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, horaInstalacion: e.target.value })}
+                  value={nuevaCita.tecnicoId}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, tecnicoId: e.target.value })}
                   style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
                 >
-                  <option value="1:00 PM">1:00 PM</option>
-                  <option value="4:00 PM">4:00 PM</option>
+                  {LISTA_TECNICOS.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre} ({t.porcentaje}% Comisión)
+                    </option>
+                  ))}
                 </select>
+
+                {/* Mano de Obra */}
+                <label style={{ fontSize: '12px', color: '#AAA', marginBottom: '-6px' }}>Precio Mano de Obra (RD$):</label>
+                <input
+                  type="number"
+                  placeholder="Monto Mano de Obra"
+                  value={nuevaCita.precioManoObra}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, precioManoObra: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                />
+
                 <textarea
-                  placeholder="Detalles / Servicio"
+                  placeholder="Detalles / Servicio a Realizar"
                   value={nuevaCita.detalles}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, detalles: e.target.value })}
                   style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px', minHeight: '60px' }}
                 />
+
                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                   <button type="submit" style={{ flex: 1, backgroundColor: '#E50914', color: '#FFF', padding: '10px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                     Guardar Cita
@@ -272,10 +330,11 @@ const exportarCitasPDF = () => {
           </div>
         )}
 
+        {/* LISTADO DE CITAS */}
         {loading ? (
           <p style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Cargando agenda de citas...</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '15px' }}>
             {citasFiltradas.length === 0 ? (
               <p style={{ color: '#888', gridColumn: '1 / -1', textAlign: 'center', padding: '30px', backgroundColor: '#141414', borderRadius: '8px', border: '1px solid #222' }}>
                 No hay citas agendadas para la selección actual.
@@ -288,6 +347,7 @@ const exportarCitasPDF = () => {
                 return (
                   <div 
                     key={c.id} 
+                    className="card-cita"
                     style={{ 
                       backgroundColor: '#141414', 
                       border: esCompletada ? '1px solid #25D366' : '1px solid #E50914', 
@@ -295,7 +355,7 @@ const exportarCitasPDF = () => {
                       padding: '18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      justifyContent: 'space-between'
+                      justify: 'space-between'
                     }}
                   >
                     <div>
@@ -308,16 +368,26 @@ const exportarCitasPDF = () => {
                         </span>
                       </div>
 
-                      <h4 style={{ margin: '5px 0', fontSize: '16px', color: '#FFF' }}>{c.clienteNombre}</h4>
+                      <h4 style={{ margin: '5px 0', fontSize: '16px' }}>{c.clienteNombre}</h4>
                       <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: '#AAA' }}>📞 Tel: {c.telefono || 'No registrado'}</p>
                       
-                      <div style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222', fontSize: '12px', color: '#DDD', marginBottom: '15px' }}>
+                      <div style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222', fontSize: '12px', marginBottom: '10px' }}>
                         <strong>Servicio / Productos:</strong>
                         <p style={{ margin: '4px 0 0 0', color: '#BBB' }}>{c.detalles}</p>
                       </div>
+
+                      {/* Info de Técnico y Comisión */}
+                      <div style={{ backgroundColor: '#1A1A1A', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', marginBottom: '15px', borderLeft: '3px solid #25D366' }}>
+                        <div>👷‍ <strong>Técnico:</strong> {c.tecnicoNombre}</div>
+                        {c.precioManoObra > 0 && (
+                          <div style={{ color: '#25D366', marginTop: '3px' }}>
+                            💰 Mano de Obra: RD$ {c.precioManoObra.toLocaleString()} | Com: RD$ {c.montoComision.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <div className="no-print" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {telLimpio && (
                         <a
                           href={`https://wa.me/1${telLimpio}?text=${encodeURIComponent(`Hola ${c.clienteNombre}, te escribimos de GR Auto Adornos para recordarte tu cita de instalación programada para el ${c.fechaCita}. ¡Te esperamos!`)}`}
@@ -325,15 +395,15 @@ const exportarCitasPDF = () => {
                           rel="noreferrer"
                           style={{ flex: 1, backgroundColor: '#25D366', color: '#000', textAlign: 'center', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', textDecoration: 'none' }}
                         >
-                          📲 Recordar (WA)
+                          📲 WhatsApp
                         </a>
                       )}
 
                       <button
-                        onClick={() => cambiarEstadoCita(c.id, esCompletada ? 'Pendiente' : 'Completada')}
+                        onClick={() => cambiarEstadoCita(c.id, c.estadoCita)}
                         style={{ flex: 1, backgroundColor: '#222', color: esCompletada ? '#FFB800' : '#25D366', border: '1px solid #444', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                       >
-                        {esCompletada ? '🔄 Marcar Pendiente' : '✅ Marcar Completada'}
+                        {esCompletada ? '🔄 Pendiente' : '✅ Completada'}
                       </button>
                     </div>
                   </div>
