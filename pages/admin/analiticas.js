@@ -13,6 +13,7 @@ export default function AnaliticasDashboard() {
   const [ventasDiarias, setVentasDiarias] = useState(0);
   const [ventasSemanales, setVentasSemanales] = useState(0);
   const [ventasMensuales, setVentasMensuales] = useState(0);
+  const [ventasMesPasado, setVentasMesPasado] = useState(0); // 👈 NUEVA MÉTRICA
   const [productosMasVendidos, setProductosMasVendidos] = useState([]);
   const [ingresosPorZona, setIngresosPorZona] = useState({});
   const [totalPedidosCount, setTotalPedidosCount] = useState(0);
@@ -55,6 +56,7 @@ export default function AnaliticasDashboard() {
     let tDiario = 0;
     let tSemanal = 0;
     let tMensual = 0;
+    let tMesPasado = 0; // 👈 ACUMULADOR MES PASADO
 
     const ahora = new Date();
     const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
@@ -66,6 +68,10 @@ export default function AnaliticasDashboard() {
     // Mes y año actual
     const mesActual = ahora.getMonth();
     const anioActual = ahora.getFullYear();
+
+    // 👈 Cálculo dinámico del mes y año pasado
+    const mesPasado = mesActual === 0 ? 11 : mesActual - 1;
+    const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual;
 
     // Contadores auxiliares
     const prodConteo = {};
@@ -102,6 +108,11 @@ export default function AnaliticasDashboard() {
         if (fechaPedido.getMonth() === mesActual && fechaPedido.getFullYear() === anioActual) {
           tMensual += monto;
         }
+
+        // 👈 Mensuales (mes pasado)
+        if (fechaPedido.getMonth() === mesPasado && fechaPedido.getFullYear() === anioMesPasado) {
+          tMesPasado += monto;
+        }
       }
 
       // Conteo de Productos más vendidos (basado en productosDetalle o campo detalles)
@@ -125,12 +136,13 @@ export default function AnaliticasDashboard() {
     setVentasDiarias(tDiario);
     setVentasSemanales(tSemanal);
     setVentasMensuales(tMensual);
+    setVentasMesPasado(tMesPasado); // 👈 SETTER MES PASADO
 
     // Ordenar productos más vendidos de mayor a menor
     const productosOrdenados = Object.keys(prodConteo)
       .map((nombre) => ({ nombre, cantidad: prodConteo[nombre] }))
       .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(top = 5); // Top 5
+      .slice(0, 5); // Top 5
     setProductosMasVendidos(productosOrdenados);
 
     setIngresosPorZona(zonaConteo);
@@ -165,7 +177,7 @@ export default function AnaliticasDashboard() {
             {/* TARJETAS DE VENTAS TOTALES */}
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '12px' }}>💰 Resumen de Ventas (RD$)</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                 
                 <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                   <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Ventas de Hoy</span>
@@ -185,6 +197,14 @@ export default function AnaliticasDashboard() {
                   <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Mes Actual</span>
                   <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#25D366', margin: '8px 0 0 0' }}>
                     RD$ {ventasMensuales.toLocaleString()}
+                  </h3>
+                </div>
+
+                {/* 👈 NUEVA TARJETA: MES PASADO */}
+                <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
+                  <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Mes Pasado</span>
+                  <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#3B82F6', margin: '8px 0 0 0' }}>
+                    RD$ {ventasMesPasado.toLocaleString()}
                   </h3>
                 </div>
 
