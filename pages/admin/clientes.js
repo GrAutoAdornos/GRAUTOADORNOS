@@ -20,48 +20,78 @@ export default function ClientesAdmin() {
     cargarClientesYHistorial();
   }, [router]);
 
- // 1. Extraer Nombre
+// 1. Extraer Nombre
   const extraerNombre = (data) => {
     if (!data) return 'Cliente Sin Nombre';
-    if (data.cliente?.nombre) return data.cliente.nombre;
-    if (data.cliente?.name) return data.cliente.name;
-    if (typeof data.cliente === 'string' && data.cliente.trim() !== '') return data.cliente;
-    return data.nombreCliente || data.nombre || 'Cliente Sin Nombre';
+
+    // Imprimir en consola el documento completo para diagnóstico
+    if (data.direccion || data.total) {
+      console.log("📦 DATOS DEL PEDIDO DESDE FIREBASE:", data);
+    }
+
+    // Probar subobjetos comunes
+    const obj = data.cliente || data.datosEnvio || data.envio || data.comprador || data.datos || data;
+    
+    if (typeof obj === 'string') return obj;
+
+    return (
+      obj.nombre ||
+      obj.name ||
+      obj.fullName ||
+      obj.nombreCliente ||
+      obj.clienteNombre ||
+      data.nombre ||
+      data.nombreCliente ||
+      'Cliente Sin Nombre'
+    );
   };
 
   // 2. Extraer Teléfono
   const extraerTelefono = (data) => {
     if (!data) return 'Sin Teléfono';
-    
-    // Busca dentro de data.cliente (objeto)
-    if (data.cliente && typeof data.cliente === 'object') {
-      const c = data.cliente;
-      if (c.telefono) return c.telefono;
-      if (c.phone) return c.phone;
-      if (c.celular) return c.celular;
-      if (c.tel) return c.tel;
-      if (c.whatsapp) return c.whatsapp;
+
+    const fuentes = [
+      data.cliente,
+      data.datosEnvio,
+      data.envio,
+      data.comprador,
+      data.datos,
+      data
+    ];
+
+    for (const f of fuentes) {
+      if (f && typeof f === 'object') {
+        const tel = f.telefono || f.phone || f.celular || f.tel || f.whatsapp;
+        if (tel) return String(tel);
+      } else if (typeof f === 'string' && /^\+?[0-9\s-]{7,}$/.test(f)) {
+        return f;
+      }
     }
 
-    // Busca en la raíz del objeto
-    return data.telefono || data.phone || data.celular || data.whatsapp || 'Sin Teléfono';
+    return 'Sin Teléfono';
   };
 
   // 3. Extraer Email
   const extraerEmail = (data) => {
     if (!data) return 'Sin Correo';
 
-    // Busca dentro de data.cliente (objeto)
-    if (data.cliente && typeof data.cliente === 'object') {
-      const c = data.cliente;
-      if (c.email) return c.email;
-      if (c.correo) return c.correo;
-      if (c.mail) return c.mail;
-      if (c.to_email) return c.to_email;
+    const fuentes = [
+      data.cliente,
+      data.datosEnvio,
+      data.envio,
+      data.comprador,
+      data.datos,
+      data
+    ];
+
+    for (const f of fuentes) {
+      if (f && typeof f === 'object') {
+        const mail = f.email || f.correo || f.mail || f.to_email;
+        if (mail) return String(mail);
+      }
     }
 
-    // Busca en la raíz del objeto
-    return data.email || data.correo || data.mail || data.to_email || 'Sin Correo';
+    return 'Sin Correo';
   };
   
   // 4. Extraer Dirección
