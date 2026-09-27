@@ -150,6 +150,7 @@ export default function ClientesAdmin() {
 
       snapPedidos.forEach((documento) => {
         const data = documento.data();
+        console.log("📦 ESTRUCTURA DEL PEDIDO EN FIREBASE:", data); // <--- AGREGA ESTA LÍNEA
         const idPedido = documento.id;
 
         const nombreCliente = extraerNombre(data);
