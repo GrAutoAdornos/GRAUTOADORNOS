@@ -634,8 +634,33 @@ export default function Home() {
       {isCheckoutOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 50, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '25px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-            <button onClick={() => setIsCheckoutOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}></button>
-
+<button 
+  type="button"
+  onClick={() => {
+    setIsCheckoutOpen(false);
+    setIsCartOpen(true); // Vuelve a abrir el carrito
+  }} 
+  style={{ 
+    position: 'absolute', 
+    top: '15px', 
+    right: '15px', 
+    backgroundColor: '#222', 
+    color: '#FFF', 
+    border: '1px solid #444', 
+    borderRadius: '50%',
+    width: '32px',
+    height: '32px',
+    fontSize: '16px', 
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  }}
+  title="Volver al carrito"
+>
+  ✕
+</button>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#E50914', marginBottom: '15px' }}>Completar Pedido</h2>
 
             <form onSubmit={handleFinalizarPedido} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
