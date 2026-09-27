@@ -4,11 +4,20 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
+// Lista de instaladores/técnicos
+const LISTA_TECNICOS = [
+  { id: 'todos', nombre: 'Todos los Técnicos', porcentaje: 0 },
+  { id: 't1', nombre: 'Carlos López', porcentaje: 20 },
+  { id: 't2', nombre: 'Marcos Ramírez', porcentaje: 25 },
+  { id: 't3', nombre: 'Juan Pérez', porcentaje: 20 },
+];
+
 export default function DesgloseTecnico() {
   const router = useRouter();
   const { mes } = router.query;
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
+  const [tecnicoSeleccionado, setTecnicoSeleccionado] = useState('todos');
   const [totalPagar, setTotalPagar] = useState(0);
 
   // Función para obtener el nombre del cliente buscando en distintos campos posibles
@@ -38,20 +47,27 @@ export default function DesgloseTecnico() {
         const estadoOrden = String(p.estado || p.status || '').toLowerCase().trim();
         const esCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
 
-        if (mesPedido === mes && esCompletado) {
+        // Filtrar por mes y por técnico si hay un filtro activo
+        const idTecnicoOrden = p.tecnicoId || 't1'; // Default técnico si no fue asignado
+        const coincideTecnico = tecnicoSeleccionado === 'todos' || idTecnicoOrden === tecnicoSeleccionado;
+
+        if (mesPedido === mes && esCompletado && coincideTecnico) {
           const detalles = String(p.detalles || p.productos || '');
-          let montoOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
+          let montoOrden = Number(p.precioManoObra ?? p.costoInstalacion ?? p.instalacion ?? 0);
           const nombreCliente = obtenerNombreCliente(p);
+          const tecnicoNombre = p.tecnicoNombre || LISTA_TECNICOS.find(t => t.id === idTecnicoOrden)?.nombre || 'Técnico General';
 
           if (montoOrden > 0) {
+            const montoCalculado = p.montoComision ? Number(p.montoComision) : montoOrden;
             listaInstalaciones.push({
               idOrden: doc.id.substring(0, 8),
               cliente: nombreCliente,
+              tecnico: tecnicoNombre,
               fecha: fechaPedido.toLocaleDateString('es-DO'),
-              detalle: 'Instalación registrada directamente',
-              monto: montoOrden
+              detalle: 'Instalación asignada en cita/pedido',
+              monto: montoCalculado
             });
-            suma += montoOrden;
+            suma += montoCalculado;
           } else if (detalles.toLowerCase().includes('instalación')) {
             Object.keys(mapaProductos).forEach((nombreProd) => {
               if (detalles.includes(nombreProd)) {
@@ -64,6 +80,7 @@ export default function DesgloseTecnico() {
                 listaInstalaciones.push({
                   idOrden: doc.id.substring(0, 8),
                   cliente: nombreCliente,
+                  tecnico: tecnicoNombre,
                   fecha: fechaPedido.toLocaleDateString('es-DO'),
                   detalle: `Instalación: ${nombreProd} (${cant} x RD$ ${tarifa.toLocaleString()})`,
                   monto: subtotal
@@ -82,7 +99,7 @@ export default function DesgloseTecnico() {
     } finally {
       setLoading(false);
     }
-  }, [mes]);
+  }, [mes, tecnicoSeleccionado]);
 
   useEffect(() => {
     if (mes) cargarDesglose();
@@ -91,6 +108,8 @@ export default function DesgloseTecnico() {
   const imprimirPDF = () => {
     window.print();
   };
+
+  const tecnicoInfoActual = LISTA_TECNICOS.find(t => t.id === tecnicoSeleccionado);
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px' }}>
@@ -104,20 +123,38 @@ export default function DesgloseTecnico() {
         }
       `}</style>
 
-      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', maxWidth: '800px', margin: '0 auto 20px auto' }}>
+      {/* BARRA SUPERIOR DE ACCIONES */}
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '800px', margin: '0 auto 20px auto', flexWrap: 'wrap', gap: '10px' }}>
         <Link href="/admin/metricas" style={{ color: '#FFF', textDecoration: 'none', background: '#222', padding: '8px 15px', borderRadius: '5px', fontSize: '13px' }}>
           ← Volver a Métricas
         </Link>
+
+        {/* SELECTOR DE TÉCNICO */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ fontSize: '13px', color: '#AAA' }}>Filtrar Técnico:</label>
+          <select 
+            value={tecnicoSeleccionado}
+            onChange={(e) => setTecnicoSeleccionado(e.target.value)}
+            style={{ backgroundColor: '#141414', color: '#FFB800', border: '1px solid #FFB800', padding: '8px 12px', borderRadius: '5px', fontWeight: 'bold', fontSize: '13px' }}
+          >
+            {LISTA_TECNICOS.map(t => (
+              <option key={t.id} value={t.id}>{t.nombre}</option>
+            ))}
+          </select>
+        </div>
+
         <button onClick={imprimirPDF} style={{ background: '#FFB800', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
           📄 Descargar Recibo PDF / Imprimir
         </button>
       </div>
 
       <div className="recibo-container" style={{ maxWidth: '800px', margin: '0 auto', background: '#141414', padding: '30px', borderRadius: '10px', border: '1px solid #333' }}>
-        <div style={{ borderBottom: '2px solid #FFB800', paddingBottom: '15px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ borderBottom: '2px solid #FFB800', paddingBottom: '15px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '22px' }}>GR AUTOADORNOS</h2>
-            <p style={{ margin: '5px 0 0 0', color: '#888', fontSize: '13px' }}>COMPROBANTE DE PAGO - TÉCNICO INSTALADOR</p>
+            <p style={{ margin: '5px 0 0 0', color: '#888', fontSize: '13px' }}>
+              COMPROBANTE DE PAGO - {tecnicoInfoActual?.nombre?.toUpperCase() || 'TÉCNICO INSTALADOR'}
+            </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ margin: 0, fontWeight: 'bold' }}>Período: {mes}</p>
@@ -133,23 +170,25 @@ export default function DesgloseTecnico() {
               <thead>
                 <tr style={{ borderBottom: '1px solid #333', textAlign: 'left' }}>
                   <th style={{ padding: '10px' }}>Fecha</th>
+                  <th style={{ padding: '10px' }}>Técnico</th>
                   <th style={{ padding: '10px' }}>Cliente / Orden</th>
                   <th style={{ padding: '10px' }}>Detalle Trabajo</th>
-                  <th style={{ padding: '10px', textAlign: 'right' }}>Monto</th>
+                  <th style={{ padding: '10px', textAlign: 'right' }}>Comisión</th>
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>No hay datos de instalaciones asignadas en este mes.</td>
+                    <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>No hay datos de instalaciones asignadas a este filtro en el mes.</td>
                   </tr>
                 ) : (
                   items.map((item, index) => (
                     <tr key={index} style={{ borderBottom: '1px solid #222' }}>
                       <td style={{ padding: '10px' }}>{item.fecha}</td>
+                      <td style={{ padding: '10px', fontWeight: 'bold', color: '#FFB800' }}>{item.tecnico}</td>
                       <td style={{ padding: '10px' }}>{item.cliente} (#{item.idOrden})</td>
                       <td style={{ padding: '10px' }}>{item.detalle}</td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>RD$ {item.monto.toLocaleString()}</td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold' }}>RD$ {item.monto.toLocaleString()}</td>
                     </tr>
                   ))
                 )}
