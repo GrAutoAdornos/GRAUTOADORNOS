@@ -34,7 +34,6 @@ export default function Home() {
     sde: { nombre: 'Santo Domingo Este', costo: 350 },
     herrera: { nombre: 'Santo Domingo Oeste (Herrera)', costo: 200 },
     dn: { nombre: 'Distrito Nacional / Centro', costo: 250 }
-    pv: { nombre: 'Provincia', costo: 500 }
   };
 
   // Control de horarios ocupados
@@ -576,7 +575,6 @@ export default function Home() {
                   <option value="sde">Santo Domingo Este - RD$ 350</option>
                   <option value="herrera">Santo Domingo Oeste (Herrera) - RD$ 200</option>
                   <option value="dn">Distrito Nacional / Centro - RD$ 250</option>
-                  <option value="pv">Provinvia - RD$ 500</option>
                 </select>
               </div>
 
