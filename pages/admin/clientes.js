@@ -10,7 +10,7 @@ export default function ClientesAdmin() {
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState('TODOS'); // 'TODOS', 'PENDIENTES', 'CONTACTADOS'
-  const [busqueda, setBusqueda] = useState(''); // <-- NUEVO ESTADO PARA BÚSQUEDA RÁPIDA
+  const [busqueda, setBusqueda] = useState('');
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   useEffect(() => {
@@ -30,15 +30,53 @@ export default function ClientesAdmin() {
       snapPedidos.forEach((documento) => {
         const data = documento.data();
         const idPedido = documento.id;
-        const nombreCliente = data.cliente || data.nombre || 'Cliente Sin Nombre';
-        const telefono = data.telefono || data.phone || 'Sin Teléfono';
-        const direccion = data.direccion || data.sector || 'Dirección no registrada';
+
+        // Búsqueda exhaustiva de Nombre (Anidado u Opciones directas)
+        const nombreCliente = 
+          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre || data.cliente.name : null) ||
+          (typeof data.cliente === 'string' ? data.cliente : null) ||
+          data.nombreCliente || 
+          data.nombre || 
+          data.name || 
+          data.customer || 
+          'Cliente Sin Nombre';
+
+        // Búsqueda exhaustiva de Teléfono
+        const telefono = 
+          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.telefono || data.cliente.phone : null) ||
+          data.telefono || 
+          data.phone || 
+          data.celular || 
+          data.tel || 
+          'Sin Teléfono';
+
+        // Búsqueda exhaustiva de Dirección
+        const direccion = 
+          (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.direccion || data.cliente.sector : null) ||
+          data.direccion || 
+          data.sector || 
+          data.address || 
+          'Dirección no registrada';
+
         const fechaPedido = data.fecha ? (data.fecha.toDate ? data.fecha.toDate() : new Date(data.fecha)) : new Date();
         const totalPedido = Number(data.total ?? data.monto ?? 0);
-        const detalles = String(data.detalles || data.productos || 'Sin detalle de productos');
+        
+        // Extracción de Productos
+        let detalles = 'Sin detalle de productos';
+        if (Array.isArray(data.productos)) {
+          detalles = data.productos.map(p => `${p.cantidad || 1}x ${p.titulo || p.nombre || 'Producto'}`).join(', ');
+        } else if (data.detalles) {
+          detalles = String(data.detalles);
+        } else if (typeof data.productos === 'string') {
+          detalles = data.productos;
+        }
+
         const contactado = Boolean(data.fidelizacionContactado ?? false);
 
-        const claveUnica = telefono !== 'Sin Teléfono' ? telefono : nombreCliente;
+        // Clave única para agrupar las compras por cliente
+        const claveUnica = (telefono !== 'Sin Teléfono') 
+          ? telefono 
+          : (nombreCliente !== 'Cliente Sin Nombre' ? nombreCliente : idPedido);
 
         if (!mapaClientes[claveUnica]) {
           mapaClientes[claveUnica] = {
@@ -99,12 +137,10 @@ export default function ClientesAdmin() {
 
   // FILTRADO INTELIGENTE (Por Estado + Búsqueda por Nombre o Teléfono)
   const clientesFiltrados = clientes.filter((c) => {
-    // 1. Filtro por estado
     let cumpleEstado = true;
     if (filtroEstado === 'PENDIENTES') cumpleEstado = !c.contactado;
     if (filtroEstado === 'CONTACTADOS') cumpleEstado = c.contactado;
 
-    // 2. Filtro por barra de búsqueda (Nombre o Teléfono)
     const textoBusqueda = busqueda.toLowerCase().trim();
     const cumpleBusqueda =
       !textoBusqueda ||
@@ -223,7 +259,7 @@ export default function ClientesAdmin() {
                       borderRadius: '10px',
                       padding: '16px',
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justify: 'space-between',
                       alignItems: 'center',
                       flexWrap: 'wrap',
                       gap: '12px'
