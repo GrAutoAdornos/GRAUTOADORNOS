@@ -4,6 +4,16 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
+// Configuración de tarifas fijas por zona (puedes ajustar los montos aquí)
+const PRECIOS_ZONA = {
+  'DISTRITO NACIONAL': 250,
+  'SANTO DOMINGO ESTE': 350,
+  'SANTO DOMINGO NORTE': 400,
+  'SANTO DOMINGO OESTE': 300,
+  'ZONA HERRERA': 200,
+  'ENVÍOS / PROVINCIA': 500,
+};
+
 export default function DesgloseTransportista() {
   const router = useRouter();
   const { mes } = router.query;
@@ -11,25 +21,39 @@ export default function DesgloseTransportista() {
   const [items, setItems] = useState([]);
   const [totalPagar, setTotalPagar] = useState(0);
 
-  const obtenerZonaYDireccion = (p, detalles) => {
-    let zona = p.zona || p.sector || p.provincia || '';
-    let direccionRaw = p.direccion || detalles || '';
-    const textoCompleto = `${zona} ${direccionRaw} ${detalles}`.toLowerCase();
+  // Obtener nombre de cliente buscando en múltiples propiedades posibles
+  const obtenerNombreCliente = (p) => {
+    return p.cliente || p.nombre || p.nombreCliente || p.comprador || p.usuario || 'Cliente General';
+  };
 
-    if (!zona) {
-      if (textoCompleto.includes('herrera')) zona = 'Zona Herrera';
-      else if (textoCompleto.includes('este') || textoCompleto.includes('sde')) zona = 'Santo Domingo Este';
-      else if (textoCompleto.includes('norte') || textoCompleto.includes('sdn')) zona = 'Santo Domingo Norte';
-      else if (textoCompleto.includes('oeste') || textoCompleto.includes('sdo')) zona = 'Santo Domingo Oeste';
-      else if (textoCompleto.includes('distrito nacional') || textoCompleto.includes('dn')) zona = 'Distrito Nacional';
-      else if (textoCompleto.includes('interior') || textoCompleto.includes('envio') || textoCompleto.includes('envío')) zona = 'Envíos / Provincia';
-      else zona = 'Zona Estándar';
+  // Determinar la zona, dirección y la tarifa asignada
+  const obtenerZonaYDireccion = (p, detalles) => {
+    let zonaDetectada = p.zona || p.sector || p.provincia || p.tipoEnvio || '';
+    let direccionRaw = p.direccion || p.direccionEnvio || p.destino || detalles || '';
+    const textoCompleto = `${zonaDetectada} ${direccionRaw} ${detalles}`.toLowerCase();
+
+    // Detección automática si el campo zona no viene configurado explícitamente
+    if (!zonaDetectada) {
+      if (textoCompleto.includes('herrera')) zonaDetectada = 'ZONA HERRERA';
+      else if (textoCompleto.includes('este') || textoCompleto.includes('sde')) zonaDetectada = 'SANTO DOMINGO ESTE';
+      else if (textoCompleto.includes('norte') || textoCompleto.includes('sdn')) zonaDetectada = 'SANTO DOMINGO NORTE';
+      else if (textoCompleto.includes('oeste') || textoCompleto.includes('sdo')) zonaDetectada = 'SANTO DOMINGO OESTE';
+      else if (textoCompleto.includes('distrito nacional') || textoCompleto.includes('dn')) zonaDetectada = 'DISTRITO NACIONAL';
+      else if (textoCompleto.includes('interior') || textoCompleto.includes('envio') || textoCompleto.includes('envío') || textoCompleto.includes('provincia')) zonaDetectada = 'ENVÍOS / PROVINCIA';
+      else zonaDetectada = 'ZONA ESTÁNDAR';
+    } else {
+      zonaDetectada = zonaDetectada.toUpperCase();
     }
 
-    const direccionLimpia = p.direccion ? p.direccion : 'Dirección Registrada en Orden';
+    const direccionLimpia = p.direccion || p.direccionEnvio || 'Dirección Registrada en Orden';
+    
+    // Obtener la tarifa establecida para esa zona
+    const tarifaZona = PRECIOS_ZONA[zonaDetectada] || PRECIOS_ZONA['ZONA ESTÁNDAR'];
+
     return {
-      zona: zona.toUpperCase(),
-      direccion: direccionLimpia
+      zona: zonaDetectada,
+      direccion: direccionLimpia,
+      tarifaZona
     };
   };
 
@@ -45,30 +69,24 @@ export default function DesgloseTransportista() {
         let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
         const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
-        // Normalizamos el estado para admitir distintas variantes (Completado, Entregado, etc.)
         const estadoOrden = String(p.estado || p.status || '').toLowerCase().trim();
         const esCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
 
         if (mesPedido === mes && esCompletado) {
           const detalles = String(p.detalles || p.productos || '');
-          let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? 0);
+          const infoZona = obtenerZonaYDireccion(p, detalles);
 
-          if (costoEnvioOrden === 0) {
-            const textoMin = detalles.toLowerCase();
-            if (textoMin.includes('distrito nacional')) costoEnvioOrden = 250;
-            else if (textoMin.includes('santo domingo')) costoEnvioOrden = 350;
-            else if (textoMin.includes('envío') || textoMin.includes('envio') || textoMin.includes('domicilio')) costoEnvioOrden = 300;
-          }
+          // Si el objeto p ya trae costoEnvio, se usa; si no, se aplica la tarifa establecida por zona
+          let costoEnvioOrden = Number(p.costoEnvio ?? p.envio ?? p.flete ?? infoZona.tarifaZona);
 
           if (costoEnvioOrden > 0) {
-            const infoZona = obtenerZonaYDireccion(p, detalles);
-
             listaEnvios.push({
               idOrden: doc.id.substring(0, 8),
-              cliente: p.cliente || p.nombre || 'Cliente General',
+              cliente: obtenerNombreCliente(p),
               fecha: fechaPedido.toLocaleDateString('es-DO'),
               direccion: infoZona.direccion,
               zona: infoZona.zona,
+              tarifaZona: infoZona.tarifaZona,
               monto: costoEnvioOrden
             });
             suma += costoEnvioOrden;
@@ -136,9 +154,9 @@ export default function DesgloseTransportista() {
                 <tr style={{ borderBottom: '1px solid #333', textAlign: 'left' }}>
                   <th style={{ padding: '10px' }}>Fecha</th>
                   <th style={{ padding: '10px' }}>Cliente / Orden</th>
-                  <th style={{ padding: '10px' }}>Zona / Destino</th>
+                  <th style={{ padding: '10px' }}>Zona Asignada</th>
                   <th style={{ padding: '10px' }}>Dirección</th>
-                  <th style={{ padding: '10px', textAlign: 'right' }}>Flete</th>
+                  <th style={{ padding: '10px', textAlign: 'right' }}>Tarifa Flete</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,7 +168,10 @@ export default function DesgloseTransportista() {
                   items.map((item, index) => (
                     <tr key={index} style={{ borderBottom: '1px solid #222' }}>
                       <td style={{ padding: '10px' }}>{item.fecha}</td>
-                      <td style={{ padding: '10px' }}>{item.cliente} (#{item.idOrden})</td>
+                      <td style={{ padding: '10px' }}>
+                        <strong style={{ display: 'block' }}>{item.cliente}</strong>
+                        <span style={{ fontSize: '11px', color: '#888' }}>Orden #{item.idOrden}</span>
+                      </td>
                       <td style={{ padding: '10px' }}>
                         <span className="badge-zona" style={{ backgroundColor: '#1A202C', color: '#3182CE', border: '1px solid #3182CE', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
                           {item.zona}
