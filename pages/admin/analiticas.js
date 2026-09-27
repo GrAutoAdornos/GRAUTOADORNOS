@@ -75,7 +75,6 @@ export default function AnaliticasDashboard() {
       return Math.max(0, subtotal - descuento + envio);
     }
 
-    // Fallback al campo total directo si no hay subtotal
     return Number(p.total || 0);
   };
 
@@ -109,7 +108,6 @@ export default function AnaliticasDashboard() {
       const montoNeto = obtenerMontoNeto(p);
       const estadoNormalizado = (p.estado || '').toString().trim().toLowerCase();
 
-      // Es completado si el estado es completado, entregado o enviado
       const esCompletado = ['completado', 'entregado', 'enviado'].includes(estadoNormalizado);
       const esPendiente = ['pendiente', 'en proceso', 'por pagar', 'procesando'].includes(estadoNormalizado);
 
@@ -174,11 +172,11 @@ export default function AnaliticasDashboard() {
           tMensual += montoNeto;
         }
 
-        // Conteo por Zonas de Envío (solo de ventas reales)
+        // Conteo por Zonas de Envío
         const zona = p.zonaEnvio || p.direccion || 'No especificada';
         zonaConteo[zona] = (zonaConteo[zona] || 0) + montoNeto;
 
-        // Conteo de Productos más vendidos (solo de compras completadas)
+        // Conteo de Productos más vendidos
         if (p.productosDetalle && Array.isArray(p.productosDetalle)) {
           p.productosDetalle.forEach((item) => {
             const nombreProd = item.nombre || item.titulo || 'Producto sin nombre';
@@ -186,16 +184,20 @@ export default function AnaliticasDashboard() {
             prodConteo[nombreProd] = (prodConteo[nombreProd] || 0) + cantidad;
           });
         } else if (p.detalles) {
-          // Intentar parsear si viene como texto
           const strDetalles = String(p.detalles);
           const items = strDetalles.split(',');
           items.forEach((it) => {
             const trimmed = it.trim();
-            // Buscar patrones como "2x Producto" o "Producto x2"
-            const matchCantidad = trimmed.match(/^(\d+)\s*x\s*(.+)$/i) \vert{}\vert{} trimmed.match(/^(.+)\s*x\s*(\d+)$/i);
-            if (matchCantidad) {
-              const qty = Number(matchCantidad[1] || matchCantidad[2] || 1);
-              const name = (matchCantidad[2] || matchCantidad[1] || trimmed).trim();
+            const matchCantidad1 = trimmed.match(/^(\d+)\s*x\s*(.+)$/i);
+            const matchCantidad2 = trimmed.match(/^(.+)\s*x\s*(\d+)$/i);
+
+            if (matchCantidad1) {
+              const qty = Number(matchCantidad1[1] || 1);
+              const name = matchCantidad1[2].trim();
+              prodConteo[name] = (prodConteo[name] || 0) + qty;
+            } else if (matchCantidad2) {
+              const qty = Number(matchCantidad2[2] || 1);
+              const name = matchCantidad2[1].trim();
               prodConteo[name] = (prodConteo[name] || 0) + qty;
             } else if (trimmed) {
               prodConteo[trimmed] = (prodConteo[trimmed] || 0) + 1;
@@ -203,7 +205,6 @@ export default function AnaliticasDashboard() {
           });
         }
       } else if (esPendiente) {
-        // Seguimiento de ventas en proceso
         tPendiente += montoNeto;
         countPendientes += 1;
       }
@@ -311,7 +312,7 @@ export default function AnaliticasDashboard() {
               </div>
             </div>
 
-            {/* TARJETAS DE OPERACIÓN (EN PROCESO & TICKET PROMEDIO) */}
+            {/* TARJETAS DE OPERACIÓN */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
               <div style={{ backgroundColor: '#141414', border: '1px solid #332d18', borderRadius: '10px', padding: '18px' }}>
                 <span style={{ fontSize: '12px', color: '#FFB800', textTransform: 'uppercase', fontWeight: 'bold' }}>⏳ Ventas Pendientes / Por Cobrar</span>
@@ -333,7 +334,6 @@ export default function AnaliticasDashboard() {
             {/* SECCIÓN 2: PRODUCTOS MÁS VENDIDOS Y ZONAS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
               
-              {/* PRODUCTOS MÁS VENDIDOS */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>🔥 Productos con Mayor Rotación</h2>
                 {productosMasVendidos.length === 0 ? (
@@ -355,7 +355,6 @@ export default function AnaliticasDashboard() {
                 )}
               </div>
 
-              {/* INGRESOS POR ZONAS DE ENVÍO */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>📍 Ingresos por Zonas de Envío</h2>
                 {Object.keys(ingresosPorZona).length === 0 ? (
@@ -377,7 +376,6 @@ export default function AnaliticasDashboard() {
             {/* SECCIÓN 3: TOP CLIENTES Y ALERTAS DE STOCK */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
               
-              {/* TOP 5 CLIENTES FRECUENTES */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFB800', marginBottom: '15px' }}>👥 Top 5 Clientes Frecuentes (VIP)</h2>
                 {topClientes.length === 0 ? (
@@ -399,7 +397,6 @@ export default function AnaliticasDashboard() {
                 )}
               </div>
 
-              {/* ALERTA DE STOCK CRÍTICO */}
               <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#E50914', marginBottom: '15px' }}>📉 Inventario Crítico (Bajo Stock)</h2>
                 {productosStockBajo.length === 0 ? (
