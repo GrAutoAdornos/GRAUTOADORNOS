@@ -1,4 +1,3 @@
-// pages/admin/desglose-tecnico.js
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { collection, getDocs } from 'firebase/firestore';
@@ -31,7 +30,11 @@ export default function DesgloseTecnico() {
         let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
         const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
-        if (mesPedido === mes) {
+        // Normalizamos el estado para admitir distintas variantes (Completado, Entregado, etc.)
+        const estadoOrden = String(p.estado || p.status || '').toLowerCase().trim();
+        const esCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
+
+        if (mesPedido === mes && esCompletado) {
           const detalles = String(p.detalles || p.productos || '');
           let montoOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
 
@@ -57,7 +60,6 @@ export default function DesgloseTecnico() {
                   idOrden: doc.id.substring(0, 8),
                   cliente: p.cliente || p.nombre || 'Cliente General',
                   fecha: fechaPedido.toLocaleDateString('es-DO'),
-                  // Muestra la cantidad y la tarifa unitaria en el texto
                   detalle: `Instalación: ${nombreProd} (${cant} x RD$ ${tarifa.toLocaleString()})`,
                   monto: subtotal
                 });
