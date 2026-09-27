@@ -104,7 +104,8 @@ export default function Proveedores() {
     const q = busquedaProducto.toLowerCase();
     return (
       (prod.nombre && prod.nombre.toLowerCase().includes(q)) ||
-      (prod.categoria && prod.categoria.toLowerCase().includes(q))
+      (prod.categoria && prod.categoria.toLowerCase().includes(q)) ||
+      (prod.proveedor && prod.proveedor.toLowerCase().includes(q)) // 👈 Agregamos esta línea para incluir al proveedor
     );
   });
 
