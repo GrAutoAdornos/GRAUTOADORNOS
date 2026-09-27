@@ -11,6 +11,11 @@ export default function DesgloseTecnico() {
   const [items, setItems] = useState([]);
   const [totalPagar, setTotalPagar] = useState(0);
 
+  // Función para obtener el nombre del cliente buscando en distintos campos posibles
+  const obtenerNombreCliente = (p) => {
+    return p.cliente || p.nombre || p.nombreCliente || p.comprador || p.usuario || 'Cliente General';
+  };
+
   const cargarDesglose = useCallback(async () => {
     setLoading(true);
     try {
@@ -30,18 +35,18 @@ export default function DesgloseTecnico() {
         let fechaPedido = p.fecha ? (p.fecha.toDate ? p.fecha.toDate() : new Date(p.fecha)) : new Date();
         const mesPedido = `${fechaPedido.getFullYear()}-${String(fechaPedido.getMonth() + 1).padStart(2, '0')}`;
 
-        // Normalizamos el estado para admitir distintas variantes (Completado, Entregado, etc.)
         const estadoOrden = String(p.estado || p.status || '').toLowerCase().trim();
         const esCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
 
         if (mesPedido === mes && esCompletado) {
           const detalles = String(p.detalles || p.productos || '');
           let montoOrden = Number(p.costoInstalacion ?? p.instalacion ?? 0);
+          const nombreCliente = obtenerNombreCliente(p);
 
           if (montoOrden > 0) {
             listaInstalaciones.push({
               idOrden: doc.id.substring(0, 8),
-              cliente: p.cliente || p.nombre || 'Cliente General',
+              cliente: nombreCliente,
               fecha: fechaPedido.toLocaleDateString('es-DO'),
               detalle: 'Instalación registrada directamente',
               monto: montoOrden
@@ -58,7 +63,7 @@ export default function DesgloseTecnico() {
 
                 listaInstalaciones.push({
                   idOrden: doc.id.substring(0, 8),
-                  cliente: p.cliente || p.nombre || 'Cliente General',
+                  cliente: nombreCliente,
                   fecha: fechaPedido.toLocaleDateString('es-DO'),
                   detalle: `Instalación: ${nombreProd} (${cant} x RD$ ${tarifa.toLocaleString()})`,
                   monto: subtotal
