@@ -3,8 +3,6 @@ import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function ReporteComisiones() {
-  // ... resto del código del componente
-}
   const [citasCompletadas, setCitasCompletadas] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
 
@@ -13,14 +11,18 @@ export default function ReporteComisiones() {
   }, []);
 
   const obtenerCitasCompletadas = async () => {
-    // Consultar citas completadas desde Firebase
-    const q = query(collection(db, 'citas'), where('estado', '==', 'Completado'));
-    const querySnapshot = await getDocs(q);
-    const lista = [];
-    querySnapshot.forEach((doc) => {
-      lista.push({ id: doc.id, ...doc.data() });
-    });
-    setCitasCompletadas(lista);
+    try {
+      // Consultar citas completadas desde Firebase
+      const q = query(collection(db, 'citas'), where('estado', '==', 'Completado'));
+      const querySnapshot = await getDocs(q);
+      const lista = [];
+      querySnapshot.forEach((doc) => {
+        lista.push({ id: doc.id, ...doc.data() });
+      });
+      setCitasCompletadas(lista);
+    } catch (error) {
+      console.error("Error al obtener las citas:", error);
+    }
   };
 
   // Filtrar citas según el técnico seleccionado
