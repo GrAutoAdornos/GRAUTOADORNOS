@@ -1,20 +1,13 @@
-// pages/admin/citas.js
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
-// Lista de instaladores/técnicos registrados
-const LISTA_TECNICOS = [
-  { id: 't1', nombre: 'Carlos López', porcentaje: 20 },
-  { id: 't2', nombre: 'Marcos Ramírez', porcentaje: 25 },
-  { id: 't3', nombre: 'Juan Pérez', porcentaje: 20 },
-];
-
 export default function CitasAdmin() {
   const router = useRouter();
   const [citas, setCitas] = useState([]);
+  const [listaTecnicos, setListaTecnicos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState('TODAS'); // 'TODAS', 'PENDIENTES', 'COMPLETADAS'
   const [filtroFecha, setFiltroFecha] = useState('TODAS');
@@ -32,7 +25,7 @@ export default function CitasAdmin() {
     fechaInstalacion: '',
     horaInstalacion: '1:00 PM',
     detalles: 'Instalación Manual Admin',
-    tecnicoId: 't1',
+    tecnicoId: '',
     precioManoObra: 0,
   });
 
@@ -42,7 +35,22 @@ export default function CitasAdmin() {
       return;
     }
     cargarCitas();
+    cargarTecnicos();
   }, [router]);
+
+  // Cargar técnicos desde Firebase Firestore
+  const cargarTecnicos = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'tecnicos'));
+      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setListaTecnicos(lista);
+      if (lista.length > 0) {
+        setNuevaCita((prev) => ({ ...prev, tecnicoId: lista[0].id }));
+      }
+    } catch (error) {
+      console.error("Error al cargar técnicos:", error);
+    }
+  };
 
   const cargarCitas = async () => {
     setLoading(true);
@@ -108,9 +116,15 @@ export default function CitasAdmin() {
     }
 
     try {
-      const tecnicoObj = LISTA_TECNICOS.find((t) => t.id === nuevaCita.tecnicoId) || LISTA_TECNICOS[0];
+      const tecnicoObj = listaTecnicos.find((t) => t.id === nuevaCita.tecnicoId) || {
+        id: 'externo',
+        nombre: 'Sin Asignar',
+        porcentajeDefecto: 20
+      };
+
+      const porcentaje = tecnicoObj.porcentajeDefecto || tecnicoObj.porcentaje || 20;
       const manoObra = Number(nuevaCita.precioManoObra) || 0;
-      const comisionCalculada = (manoObra * tecnicoObj.porcentaje) / 100;
+      const comisionCalculada = (manoObra * porcentaje) / 100;
 
       const nuevoDoc = {
         cliente: nuevaCita.cliente,
@@ -123,7 +137,7 @@ export default function CitasAdmin() {
         horaCita: nuevaCita.horaInstalacion,
         tecnicoId: tecnicoObj.id,
         tecnicoNombre: tecnicoObj.nombre,
-        porcentajeComision: tecnicoObj.porcentaje,
+        porcentajeComision: porcentaje,
         precioManoObra: manoObra,
         montoComision: comisionCalculada,
         creadoEn: new Date().toISOString()
@@ -138,7 +152,7 @@ export default function CitasAdmin() {
         fechaInstalacion: '',
         horaInstalacion: '1:00 PM',
         detalles: 'Instalación Manual Admin',
-        tecnicoId: 't1',
+        tecnicoId: listaTecnicos[0]?.id || '',
         precioManoObra: 0,
       });
       cargarCitas();
@@ -179,6 +193,46 @@ export default function CitasAdmin() {
       </header>
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '25px 20px' }}>
+        
+        {/* 🟢 BOTONES DE NAVEGACIÓN A TÉCNICOS Y COMISIONES */}
+        <div className="no-print" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          <Link href="/admin/tecnicos">
+            <button style={{
+              backgroundColor: '#222',
+              color: '#FFF',
+              padding: '10px 16px',
+              borderRadius: '6px',
+              border: '1px solid #444',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              👷‍♂️ Gestionar Técnicos
+            </button>
+          </Link>
+
+          <Link href="/admin/comisiones">
+            <button style={{
+              backgroundColor: '#E50914',
+              color: '#FFF',
+              padding: '10px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              💰 Ver Comisiones
+            </button>
+          </Link>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '20px' }}>Agenda de Servicios Agendados</h2>
@@ -286,18 +340,22 @@ export default function CitasAdmin() {
                   </select>
                 </div>
 
-                {/* Seleccionar Técnico */}
+                {/* Seleccionar Técnico desde Firebase */}
                 <label style={{ fontSize: '12px', color: '#AAA', marginBottom: '-6px' }}>Técnico Asignado:</label>
                 <select
                   value={nuevaCita.tecnicoId}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, tecnicoId: e.target.value })}
                   style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
                 >
-                  {LISTA_TECNICOS.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nombre} ({t.porcentaje}% Comisión)
-                    </option>
-                  ))}
+                  {listaTecnicos.length === 0 ? (
+                    <option value="">Cargando técnicos...</option>
+                  ) : (
+                    listaTecnicos.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre} ({t.porcentajeDefecto || t.porcentaje || 20}% Comisión)
+                      </option>
+                    ))
+                  )}
                 </select>
 
                 {/* Mano de Obra */}
@@ -355,7 +413,7 @@ export default function CitasAdmin() {
                       padding: '18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      justify: 'space-between'
+                      justifyContent: 'space-between'
                     }}
                   >
                     <div>
@@ -378,7 +436,7 @@ export default function CitasAdmin() {
 
                       {/* Info de Técnico y Comisión */}
                       <div style={{ backgroundColor: '#1A1A1A', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', marginBottom: '15px', borderLeft: '3px solid #25D366' }}>
-                        <div>👷‍ <strong>Técnico:</strong> {c.tecnicoNombre}</div>
+                        <div>👷‍♂️ <strong>Técnico:</strong> {c.tecnicoNombre}</div>
                         {c.precioManoObra > 0 && (
                           <div style={{ color: '#25D366', marginTop: '3px' }}>
                             💰 Mano de Obra: RD$ {c.precioManoObra.toLocaleString()} | Com: RD$ {c.montoComision.toLocaleString()}
