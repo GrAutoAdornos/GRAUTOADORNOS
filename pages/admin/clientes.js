@@ -23,32 +23,37 @@ export default function ClientesAdmin() {
 // 1. Extraer Nombre
   const extraerNombre = (data) => {
     if (!data) return 'Cliente Sin Nombre';
-    if (data.cliente && typeof data.cliente === 'object' && data.cliente.nombre) {
-      return data.cliente.nombre;
-    }
-    return data.clienteNombre || data.cliente || data.nombre || 'Cliente Sin Nombre';
+    return (
+      data.clienteNombre ||
+      (data.cliente && typeof data.cliente === 'object' ? data.cliente.nombre : data.cliente) ||
+      data.nombre ||
+      'Cliente Sin Nombre'
+    );
   };
 
   // 2. Extraer Teléfono
   const extraerTelefono = (data) => {
     if (!data) return 'Sin Teléfono';
-    if (data.cliente && typeof data.cliente === 'object') {
-      const tel = data.cliente.telefono || data.cliente.phone || data.cliente.celular;
-      if (tel) return String(tel);
-    }
-    const telRaiz = data.telefono || data.phone || data.celular || data.whatsapp;
-    return telRaiz ? String(telRaiz) : 'Sin Teléfono';
+    return (
+      data.clienteTelefono ||
+      data.telefono ||
+      data.phone ||
+      data.celular ||
+      (data.cliente && typeof data.cliente === 'object' ? data.cliente.telefono || data.cliente.phone : null) ||
+      'Sin Teléfono'
+    );
   };
 
   // 3. Extraer Email
   const extraerEmail = (data) => {
     if (!data) return 'Sin Correo';
-    if (data.cliente && typeof data.cliente === 'object') {
-      const mail = data.cliente.email || data.cliente.correo || data.cliente.to_email;
-      if (mail) return String(mail);
-    }
-    const mailRaiz = data.email || data.correo || data.to_email || data.mail;
-    return mailRaiz ? String(mailRaiz) : 'Sin Correo';
+    return (
+      data.clienteEmail ||
+      data.email ||
+      data.correo ||
+      (data.cliente && typeof data.cliente === 'object' ? data.cliente.email || data.cliente.correo : null) ||
+      'Sin Correo'
+    );
   };
   
   // 4. Extraer Dirección
