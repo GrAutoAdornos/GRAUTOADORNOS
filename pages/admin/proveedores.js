@@ -12,6 +12,10 @@ export default function Proveedores() {
   const [loading, setLoading] = useState(true);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null);
 
+  // Estados de búsqueda
+  const [busquedaProveedor, setBusquedaProveedor] = useState('');
+  const [busquedaProducto, setBusquedaProducto] = useState('');
+
   // Formulario Proveedor
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -37,7 +41,7 @@ export default function Proveedores() {
       provSnap.forEach((d) => provList.push({ id: d.id, ...d.data() }));
       setProveedores(provList);
 
-      // Cargar Productos para vincular historial por proveedor
+      // Cargar Productos
       const prodSnap = await getDocs(collection(db, 'productos'));
       const prodList = [];
       prodSnap.forEach((d) => prodList.push({ id: d.id, ...d.data() }));
@@ -78,13 +82,33 @@ export default function Proveedores() {
 
   const eliminarProveedor = async (id) => {
     if (confirm("¿Deseas eliminar este proveedor?")) {
-      await deleteDoc(doc(db, 'proveedores', id));
+      await deleteDoc(doc(db, 'proveedores'), id);
       if (proveedorSeleccionado?.id === id) setProveedorSeleccionado(null);
       cargarDatos();
     }
   };
 
-  // Filtrar productos asociados al proveedor seleccionado
+  // 🔍 Filtro 1: Filtrar proveedores por nombre, contacto o teléfono
+  const proveedoresFiltrados = proveedores.filter((p) => {
+    const q = busquedaProveedor.toLowerCase();
+    return (
+      (p.nombre && p.nombre.toLowerCase().includes(q)) ||
+      (p.contacto && p.contacto.toLowerCase().includes(q)) ||
+      (p.telefono && p.telefono.toLowerCase().includes(q))
+    );
+  });
+
+  // 🔍 Filtro 2: Filtrar productos globalmente para saber dónde fue comprado
+  const productosFiltradosGlobal = productos.filter((prod) => {
+    if (!busquedaProducto.trim()) return false;
+    const q = busquedaProducto.toLowerCase();
+    return (
+      (prod.nombre && prod.nombre.toLowerCase().includes(q)) ||
+      (prod.categoria && prod.categoria.toLowerCase().includes(q))
+    );
+  });
+
+  // Productos asociados únicamente al proveedor seleccionado en el panel inferior
   const productosDelProveedor = productos.filter(
     (p) => p.proveedor && proveedorSeleccionado && p.proveedor.toLowerCase() === proveedorSeleccionado.nombre.toLowerCase()
   );
@@ -126,15 +150,80 @@ export default function Proveedores() {
           <button type="submit" style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>Guardar Proveedor</button>
         </form>
 
+        {/* 🔍 SECCIÓN DE BÚSQUEDA RÁPIDA DE PRODUCTOS Y PROVEEDORES */}
+        <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '10px', padding: '15px', marginBottom: '25px' }}>
+          <h3 style={{ fontSize: '14px', color: '#FFF', marginTop: 0, marginBottom: '12px' }}>🔍 Rastreador de Producto & Proveedor</h3>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: 0, marginBottom: '12px' }}>Escribe el nombre de un producto para recordar a quién se lo compraste o busca un proveedor perdido por nombre o contacto.</p>
+
+          <input
+            type="text"
+            placeholder="🔎 Buscar producto en el catálogo (ej: Luces LED, Radio Android...)"
+            value={busquedaProducto}
+            onChange={(e) => setBusquedaProducto(e.target.value)}
+            style={{ width: '100%', backgroundColor: '#000', border: '1px solid #E50914', color: '#FFF', padding: '12px', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' }}
+          />
+
+          {/* RESULTADOS DE LA BÚSQUEDA DE PRODUCTOS */}
+          {busquedaProducto.trim() !== '' && (
+            <div style={{ marginTop: '15px', backgroundColor: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#25D366' }}>Resultados encontrados para: "{busquedaProducto}"</h4>
+              {productosFiltradosGlobal.length === 0 ? (
+                <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>No se encontraron productos con ese nombre.</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #333', color: '#888' }}>
+                      <th style={{ padding: '8px' }}>Producto</th>
+                      <th style={{ padding: '8px' }}>Proveedor Asignado</th>
+                      <th style={{ padding: '8px' }}>Contacto Proveedor</th>
+                      <th style={{ padding: '8px' }}>Costo Compra</th>
+                      <th style={{ padding: '8px' }}>Tiempo Entrega</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productosFiltradosGlobal.map((prod) => {
+                      // Buscar datos detallados del proveedor asociado al producto
+                      const provObj = proveedores.find(
+                        (prov) => prod.proveedor && prov.nombre.toLowerCase() === prod.proveedor.toLowerCase()
+                      );
+                      return (
+                        <tr key={prod.id} style={{ borderBottom: '1px solid #222' }}>
+                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#FFF' }}>{prod.nombre}</td>
+                          <td style={{ padding: '8px', color: '#E50914', fontWeight: 'bold' }}>{prod.proveedor || 'Sin proveedor asignado'}</td>
+                          <td style={{ padding: '8px', color: '#AAA' }}>
+                            {provObj ? `📞 ${provObj.telefono || 'Sin Télf.'} (${provObj.contacto || 'N/A'})` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px', color: '#ff4d4d' }}>RD$ {prod.costoCompra || 0}</td>
+                          <td style={{ padding: '8px', color: '#AAA' }}>⏱️ {prod.tiempoEntrega || 'No especificado'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '20px' }}>
-          {/* Lista de Proveedores */}
+          {/* Lista de Proveedores con Buscador */}
           <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '15px' }}>
-            <h3 style={{ fontSize: '14px', marginBottom: '15px' }}>Directorio de Proveedores</h3>
-            {proveedores.length === 0 ? (
-              <p style={{ fontSize: '12px', color: '#666' }}>No hay proveedores agregados.</p>
+            <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Directorio de Proveedores</h3>
+            
+            {/* Buscador de proveedores */}
+            <input
+              type="text"
+              placeholder="🔍 Filtrar por nombre, teléfono o contacto..."
+              value={busquedaProveedor}
+              onChange={(e) => setBusquedaProveedor(e.target.value)}
+              style={{ width: '100%', backgroundColor: '#000', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', marginBottom: '15px', boxSizing: 'border-box' }}
+            />
+
+            {proveedoresFiltrados.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#666' }}>No se encontraron proveedores.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {proveedores.map((p) => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '500px', overflowY: 'auto' }}>
+                {proveedoresFiltrados.map((p) => {
                   const estaSeleccionado = proveedorSeleccionado?.id === p.id;
                   return (
                     <div
@@ -147,7 +236,7 @@ export default function Proveedores() {
                         borderRadius: '8px',
                         cursor: 'pointer',
                         display: 'flex',
-                        justifyLink: 'space-between',
+                        justifyContent: 'space-between',
                         alignItems: 'center'
                       }}
                     >
@@ -163,12 +252,12 @@ export default function Proveedores() {
             )}
           </div>
 
-          {/* Historial de Compras y Suministros por Proveedor */}
+          {/* Historial de Compras y Suministros por Proveedor Seleccionado */}
           <div style={{ backgroundColor: '#141414', border: '1px solid #222', borderRadius: '10px', padding: '15px' }}>
             <h3 style={{ fontSize: '14px', marginBottom: '15px' }}>Historial y Productos de Suministro</h3>
             
             {!proveedorSeleccionado ? (
-              <p style={{ fontSize: '12px', color: '#888' }}>👈 Selecciona un proveedor de la lista para ver su historial de productos, precios y tiempos de entrega.</p>
+              <p style={{ fontSize: '12px', color: '#888' }}>👈 Selecciona un proveedor de la lista para ver todos los productos que le compras, sus costos y tiempos de entrega.</p>
             ) : (
               <div>
                 <div style={{ backgroundColor: '#000', border: '1px solid #333', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
