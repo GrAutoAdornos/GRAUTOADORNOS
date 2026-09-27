@@ -11,7 +11,7 @@ export default function ReporteComisiones() {
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
   const [filtroPago, setFiltroPago] = useState('todos'); // 'todos', 'pendiente', 'pagado'
   const [loading, setLoading] = useState(true);
-  const [modoRecibo, setModoRecibo] = useState(false); // Alterna a vista de recibo imprimible
+  const [modoRecibo, setModoRecibo] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -37,6 +37,39 @@ export default function ReporteComisiones() {
     }
   };
 
+  // Función para extraer el costo de instalación del pedido o producto
+  const extraerPrecioInstalacion = (data) => {
+    // 1. Si existe un campo explícito en la raíz de la orden
+    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
+    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
+    if (data.instalacion && Number(data.instalacion) > 0) return Number(data.instalacion);
+    if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
+
+    // 2. Si viene dentro del array de productos de la orden
+    if (Array.isArray(data.productos)) {
+      let sumaInstalaciones = 0;
+      data.productos.forEach((p) => {
+        if (p.precioInstalacion) sumaInstalaciones += Number(p.precioInstalacion);
+        else if (p.costoInstalacion) sumaInstalaciones += Number(p.costoInstalacion);
+        else if (p.conInstalacion && p.precioInstalacionExtra) sumaInstalaciones += Number(p.precioInstalacionExtra);
+      });
+      if (sumaInstalaciones > 0) return sumaInstalaciones;
+    }
+
+    // 3. Buscar monto de instalación en texto o total si no se especificó un desglose separado
+    if (data.detalles || data.productos) {
+      const textoDetalle = typeof data.detalles === 'string' ? data.detalles : JSON.stringify(data.productos || '');
+      // Busca patrones como "Instalación: RD$1000" o "Instalacion 500"
+      const matchMonto = textoDetalle.match(/instalaci[oó]n[^\d]*(\d+)/i);
+      if (matchMonto && matchMonto[1]) {
+        return Number(matchMonto[1]);
+      }
+    }
+
+    // 4. Fallback al total del pedido si la orden es exclusivamente un servicio de instalación
+    return Number(data.total || data.montoTotal || 0);
+  };
+
   // Cargar citas o pedidos completados
   const obtenerCitasCompletadas = async () => {
     try {
@@ -48,34 +81,20 @@ export default function ReporteComisiones() {
         const estado = data.estadoCita || data.estado;
         
         if (estado === 'Completada' || estado === 'Completado') {
-          // Extraer costo de instalación
-          let precioInstalacion = Number(
-            data.precioInstalacion || 
-            data.costoInstalacion || 
-            data.instalacion || 
-            data.precioManoObra || 
-            0
-          );
-
-          // Si el precio de instalación no está en un campo numérico directo, buscarlo en detalles
-          if (precioInstalacion === 0 && data.detalles && String(data.detalles).includes('Instalación')) {
-            const match = String(data.detalles).match(/\d+/);
-            if (match) precioInstalacion = Number(match[0]);
-          }
-
+          const precioInstalacion = extraerPrecioInstalacion(data);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
 
           lista.push({
             id: docSnap.id,
             clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
-            vehiculo: data.vehiculo || data.detalles || data.productos || 'Servicio de Instalación',
+            vehiculo: data.vehiculo || data.detalles || (Array.isArray(data.productos) ? data.productos.map(p => p.nombre || p.titulo).join(', ') : 'Servicio de Instalación'),
             tecnicoId: data.tecnicoId || '',
             tecnicoNombre: data.tecnicoNombre || 'Sin Asignar',
             precioInstalacion: precioInstalacion,
             porcentajeComision: porcentajeComision,
             montoComision: montoComision,
-            estadoPagoTecnico: data.estadoPagoTecnico || 'pendiente', // 'pendiente' o 'pagado'
+            estadoPagoTecnico: data.estadoPagoTecnico || 'pendiente',
             fecha: data.fechaInstalacion || data.fechaCita || new Date().toLocaleDateString(),
             ...data
           });
@@ -88,7 +107,7 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Cambiar el estado de pago al técnico (Pagado / Pendiente) y guardarlo en Firebase
+  // Actualizar estado de pago en Firebase
   const cambiarEstadoPago = async (id, estadoActual) => {
     const nuevoEstado = estadoActual === 'pagado' ? 'pendiente' : 'pagado';
     try {
@@ -104,7 +123,7 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Calcular comisión dinámica basándose en el técnico actual
+  // Calcular comisión automática con base en el técnico y el costo de instalación
   const citasProcesadas = citasCompletadas.map((item) => {
     const tecObj = tecnicos.find((t) => t.id === item.tecnicoId);
     const porcentaje = item.porcentajeComision > 0 
@@ -120,7 +139,7 @@ export default function ReporteComisiones() {
     };
   });
 
-  // Filtrado compuesto (Técnico + Estado de Pago)
+  // Filtros
   const citasFiltradas = citasProcesadas.filter((c) => {
     if (tecnicoFiltro !== 'todos' && c.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && c.estadoPagoTecnico !== 'pendiente') return false;
@@ -128,11 +147,11 @@ export default function ReporteComisiones() {
     return true;
   });
 
-  // Totales
+  // Totales generales
   const totalInstalaciones = citasFiltradas.reduce((acc, curr) => acc + (curr.precioInstalacion || 0), 0);
   const totalComisiones = citasFiltradas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
-  // Citas solo pagadas para el recibo de pago
+  // Citas solo pagadas para el recibo de firmas
   const citasSoloPagadas = citasFiltradas.filter((c) => c.estadoPagoTecnico === 'pagado');
   const totalComisionesPagadas = citasSoloPagadas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
@@ -141,7 +160,6 @@ export default function ReporteComisiones() {
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif' }}>
       
-      {/* Estilos para impresión en PDF/Físico */}
       <style jsx global>{`
         @media print {
           body { background-color: #FFF !important; color: #000 !important; }
@@ -152,7 +170,7 @@ export default function ReporteComisiones() {
         }
       `}</style>
 
-      {/* HEADER DE NAVEGACIÓN */}
+      {/* HEADER */}
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Link href="/admin/citas">
@@ -170,10 +188,9 @@ export default function ReporteComisiones() {
         </Link>
       </header>
 
-      {/* CONTROLES Y FILTROS */}
+      {/* CONTROLES */}
       <div className="no-print" style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         
-        {/* Filtro por Técnico */}
         <select 
           value={tecnicoFiltro} 
           onChange={(e) => setTecnicoFiltro(e.target.value)}
@@ -187,7 +204,6 @@ export default function ReporteComisiones() {
           ))}
         </select>
 
-        {/* Filtro por Estado de Pago */}
         <select 
           value={filtroPago} 
           onChange={(e) => setFiltroPago(e.target.value)}
@@ -198,7 +214,6 @@ export default function ReporteComisiones() {
           <option value="pagado">🟢 Solo Pagados</option>
         </select>
 
-        {/* Botón para alternar a Recibo/Comprobante de Pago */}
         <button 
           onClick={() => setModoRecibo(!modoRecibo)}
           style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
@@ -214,7 +229,7 @@ export default function ReporteComisiones() {
         </button>
       </div>
 
-      {/* VISTA 1: RECIBO DE PAGO COMPROBANTE CON FIRMA */}
+      {/* VISTA RECIBO CON FIRMAS */}
       {modoRecibo ? (
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '30px', borderRadius: '10px', border: '1px solid #333', maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
@@ -226,7 +241,7 @@ export default function ReporteComisiones() {
           </div>
 
           <p style={{ fontSize: '13px', color: '#CCC', marginBottom: '15px' }}>
-            A continuación se detallan exclusivamente los trabajos que han sido <strong>PAGADOS</strong> y liquidados:
+            A continuación se detallan exclusivamente los trabajos que han sido <strong>PAGADOS</strong>:
           </p>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
@@ -266,7 +281,6 @@ export default function ReporteComisiones() {
             <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#25D366' }}>RD$ {totalComisionesPagadas.toLocaleString()}</span>
           </div>
 
-          {/* SECCIÓN DE FIRMAS DE CONFORMIDAD */}
           <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '60px', textAlign: 'center' }}>
             <div style={{ width: '220px', borderTop: '1px solid #FFF', paddingTop: '8px' }}>
               <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold' }}>Firma del Técnico</p>
@@ -280,9 +294,8 @@ export default function ReporteComisiones() {
         </div>
       ) : (
 
-        /* VISTA 2: TABLA PRINCIPAL DE GESTIÓN DE COMISIONES */
+        /* TABLA GENERAL */
         <>
-          {/* TARJETAS DE RESUMEN */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
               <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Trabajos Registrados</p>
@@ -300,7 +313,6 @@ export default function ReporteComisiones() {
             </div>
           </div>
 
-          {/* TABLA DE DETALLES */}
           {loading ? (
             <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Cargando reporte de comisiones...</p>
           ) : (
@@ -323,7 +335,9 @@ export default function ReporteComisiones() {
                     <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
                       <td style={{ padding: '10px' }}>{item.clienteNombre} - {item.vehiculo}</td>
                       <td style={{ padding: '10px' }}>{item.tecnicoNombre}</td>
-                      <td style={{ padding: '10px' }}>RD$ {(item.precioInstalacion || 0).toLocaleString()}</td>
+                      <td style={{ padding: '10px' }}>
+                        RD$ {(item.precioInstalacion || 0).toLocaleString()}
+                      </td>
                       <td style={{ padding: '10px' }}>{item.porcentajeComision || 0}%</td>
                       <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }}>
                         RD$ {(item.montoComision || 0).toLocaleString()}
