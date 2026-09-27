@@ -20,107 +20,50 @@ export default function ClientesAdmin() {
     cargarClientesYHistorial();
   }, [router]);
 
-  // 1. Extraer Nombre
+ // 1. Extraer Nombre
   const extraerNombre = (data) => {
     if (!data) return 'Cliente Sin Nombre';
-    
-    if (data.cliente && typeof data.cliente === 'object') {
-      const c = data.cliente;
-      if (c.nombre) return c.nombre;
-      if (c.name) return c.name;
-      if (c.fullName) return c.fullName;
-      if (c.nombreCliente) return c.nombreCliente;
-    }
-
-    if (typeof data.cliente === 'string' && data.cliente.trim() !== '') {
-      return data.cliente;
-    }
-
-    if (data.nombreCliente) return data.nombreCliente;
-    if (data.clienteNombre) return data.clienteNombre;
-    if (data.nombre_cliente) return data.nombre_cliente;
-    if (data.nombre) return data.nombre;
-    if (data.name) return data.name;
-    if (data.fullName) return data.fullName;
-    if (data.comprador) return data.comprador;
-    if (data.usuario) return data.usuario;
-    if (data.displayName) return data.displayName;
-
-    if (data.envio && typeof data.envio === 'object') {
-      if (data.envio.nombre) return data.envio.nombre;
-      if (data.envio.nombreCliente) return data.envio.nombreCliente;
-    }
-    if (data.datos && typeof data.datos === 'object') {
-      if (data.datos.nombre) return data.datos.nombre;
-    }
-
-    return 'Cliente Sin Nombre';
+    if (data.cliente?.nombre) return data.cliente.nombre;
+    if (data.cliente?.name) return data.cliente.name;
+    if (typeof data.cliente === 'string' && data.cliente.trim() !== '') return data.cliente;
+    return data.nombreCliente || data.nombre || 'Cliente Sin Nombre';
   };
 
-  // 2. Extraer Teléfono (ampliado)
+  // 2. Extraer Teléfono
   const extraerTelefono = (data) => {
     if (!data) return 'Sin Teléfono';
-
+    
+    // Busca dentro de data.cliente (objeto)
     if (data.cliente && typeof data.cliente === 'object') {
       const c = data.cliente;
-      if (c.telefono || c.phone || c.celular || c.tel || c.whatsapp) {
-        return c.telefono || c.phone || c.celular || c.tel || c.whatsapp;
-      }
+      if (c.telefono) return c.telefono;
+      if (c.phone) return c.phone;
+      if (c.celular) return c.celular;
+      if (c.tel) return c.tel;
+      if (c.whatsapp) return c.whatsapp;
     }
 
-    if (data.envio && typeof data.envio === 'object') {
-      if (data.envio.telefono || data.envio.phone || data.envio.celular) {
-        return data.envio.telefono || data.envio.phone || data.envio.celular;
-      }
-    }
-
-    if (data.datos && typeof data.datos === 'object') {
-      if (data.datos.telefono || data.datos.phone || data.datos.celular) {
-        return data.datos.telefono || data.datos.phone || data.datos.celular;
-      }
-    }
-
-    return (
-      data.telefono || 
-      data.phone || 
-      data.celular || 
-      data.tel || 
-      data.whatsapp || 
-      'Sin Teléfono'
-    );
+    // Busca en la raíz del objeto
+    return data.telefono || data.phone || data.celular || data.whatsapp || 'Sin Teléfono';
   };
 
-  // 3. Extraer Email (nueva función)
+  // 3. Extraer Email
   const extraerEmail = (data) => {
     if (!data) return 'Sin Correo';
 
+    // Busca dentro de data.cliente (objeto)
     if (data.cliente && typeof data.cliente === 'object') {
       const c = data.cliente;
-      if (c.email || c.correo || c.mail) {
-        return c.email || c.correo || c.mail;
-      }
+      if (c.email) return c.email;
+      if (c.correo) return c.correo;
+      if (c.mail) return c.mail;
+      if (c.to_email) return c.to_email;
     }
 
-    if (data.envio && typeof data.envio === 'object') {
-      if (data.envio.email || data.envio.correo) {
-        return data.envio.email || data.envio.correo;
-      }
-    }
-
-    if (data.datos && typeof data.datos === 'object') {
-      if (data.datos.email || data.datos.correo) {
-        return data.datos.email || data.datos.correo;
-      }
-    }
-
-    return (
-      data.email || 
-      data.correo || 
-      data.mail || 
-      'Sin Correo'
-    );
+    // Busca en la raíz del objeto
+    return data.email || data.correo || data.mail || data.to_email || 'Sin Correo';
   };
-
+  
   // 4. Extraer Dirección
   const extraerDireccion = (data) => {
     if (!data) return 'Dirección no registrada';
