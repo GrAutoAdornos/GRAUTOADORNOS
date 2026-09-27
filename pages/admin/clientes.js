@@ -23,75 +23,32 @@ export default function ClientesAdmin() {
 // 1. Extraer Nombre
   const extraerNombre = (data) => {
     if (!data) return 'Cliente Sin Nombre';
-
-    // Imprimir en consola el documento completo para diagnóstico
-    if (data.direccion || data.total) {
-      console.log("📦 DATOS DEL PEDIDO DESDE FIREBASE:", data);
+    if (data.cliente && typeof data.cliente === 'object' && data.cliente.nombre) {
+      return data.cliente.nombre;
     }
-
-    // Probar subobjetos comunes
-    const obj = data.cliente || data.datosEnvio || data.envio || data.comprador || data.datos || data;
-    
-    if (typeof obj === 'string') return obj;
-
-    return (
-      obj.nombre ||
-      obj.name ||
-      obj.fullName ||
-      obj.nombreCliente ||
-      obj.clienteNombre ||
-      data.nombre ||
-      data.nombreCliente ||
-      'Cliente Sin Nombre'
-    );
+    return data.clienteNombre || data.cliente || data.nombre || 'Cliente Sin Nombre';
   };
 
   // 2. Extraer Teléfono
   const extraerTelefono = (data) => {
     if (!data) return 'Sin Teléfono';
-
-    const fuentes = [
-      data.cliente,
-      data.datosEnvio,
-      data.envio,
-      data.comprador,
-      data.datos,
-      data
-    ];
-
-    for (const f of fuentes) {
-      if (f && typeof f === 'object') {
-        const tel = f.telefono || f.phone || f.celular || f.tel || f.whatsapp;
-        if (tel) return String(tel);
-      } else if (typeof f === 'string' && /^\+?[0-9\s-]{7,}$/.test(f)) {
-        return f;
-      }
+    if (data.cliente && typeof data.cliente === 'object') {
+      const tel = data.cliente.telefono || data.cliente.phone || data.cliente.celular;
+      if (tel) return String(tel);
     }
-
-    return 'Sin Teléfono';
+    const telRaiz = data.telefono || data.phone || data.celular || data.whatsapp;
+    return telRaiz ? String(telRaiz) : 'Sin Teléfono';
   };
 
   // 3. Extraer Email
   const extraerEmail = (data) => {
     if (!data) return 'Sin Correo';
-
-    const fuentes = [
-      data.cliente,
-      data.datosEnvio,
-      data.envio,
-      data.comprador,
-      data.datos,
-      data
-    ];
-
-    for (const f of fuentes) {
-      if (f && typeof f === 'object') {
-        const mail = f.email || f.correo || f.mail || f.to_email;
-        if (mail) return String(mail);
-      }
+    if (data.cliente && typeof data.cliente === 'object') {
+      const mail = data.cliente.email || data.cliente.correo || data.cliente.to_email;
+      if (mail) return String(mail);
     }
-
-    return 'Sin Correo';
+    const mailRaiz = data.email || data.correo || data.to_email || data.mail;
+    return mailRaiz ? String(mailRaiz) : 'Sin Correo';
   };
   
   // 4. Extraer Dirección
