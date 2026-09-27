@@ -8,12 +8,12 @@ export default function HistorialPedidos() {
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState('Todos');
 
-  // Estados para el Modal de Crear Pedido Manual (Idéntico a la Web)
+  // Estados para el Modal de Crear Pedido Manual
   const [mostrarModal, setMostrarModal] = useState(false);
   const [productosInventario, setProductosInventario] = useState([]);
   
   // Selección de Tipo de Cliente (Nuevo vs Existente)
-  const [tipoCliente, setTipoCliente] = useState('nuevo'); // 'nuevo' o 'existente'
+  const [tipoCliente, setTipoCliente] = useState('nuevo');
   const [listaClientesCRM, setListaClientesCRM] = useState([]);
   const [clienteExistenteSeleccionado, setClienteExistenteSeleccionado] = useState('');
 
@@ -50,7 +50,7 @@ export default function HistorialPedidos() {
     cargarInventario();
   }, []);
 
-  // Función auxiliar para validar que la fecha sea SÁBADO (día 6 en JavaScript)
+  // Validación de día SÁBADO
   const esSabado = (fechaString) => {
     if (!fechaString) return false;
     const fecha = new Date(`${fechaString}T00:00:00`);
@@ -67,7 +67,6 @@ export default function HistorialPedidos() {
         const data = documento.data();
         list.push({ id: documento.id, ...data });
 
-        // Extraer datos soportando la estructura de la web
         const nombre = data.clienteNombre || 
                        (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre : data.cliente) || 
                        'Cliente Sin Nombre';
@@ -213,7 +212,7 @@ export default function HistorialPedidos() {
         return;
       }
       if (!esSabado(fechaCita)) {
-        alert("⚠️ Las citas de instalación solo pueden agendarse los días SÁBADO.");
+        alert("Las citas de instalación solo pueden agendarse los días SÁBADO.");
         return;
       }
     }
@@ -256,6 +255,8 @@ export default function HistorialPedidos() {
         if (requiereInstalacion) {
           datosPedido.fechaCita = fechaCita;
           datosPedido.horaCita = horaCita;
+          datosPedido.fechaInstalacion = fechaCita;
+          datosPedido.horaInstalacion = horaCita;
           datosPedido.estadoCita = 'Pendiente';
         }
 
@@ -289,6 +290,11 @@ export default function HistorialPedidos() {
     return p.estado === filtroEstado;
   });
 
+  // 📊 CÁLCULO DE CONTADORES
+  const totalPendientes = pedidos.filter((p) => p.estado === 'Pendiente').length;
+  const totalCompletados = pedidos.filter((p) => p.estado === 'Completado' || p.estado === 'Completada').length;
+  const totalCancelados = pedidos.filter((p) => p.estado === 'Cancelado' || p.estado === 'Cancelada').length;
+
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '30px 20px', fontFamily: 'sans-serif' }}>
       {/* Header */}
@@ -301,7 +307,7 @@ export default function HistorialPedidos() {
             onClick={() => setMostrarModal(true)}
             style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-             Nuevo Pedido Manual
+            ➕ Nuevo Pedido Manual
           </button>
           <button onClick={() => window.location.href = '/admin/dashboard'} style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
             Volver al Panel
@@ -310,6 +316,30 @@ export default function HistorialPedidos() {
       </div>
 
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        
+        {/* 📊 BLOQUE DE TARJETAS CON CONTADORES DE ESTADO */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+          <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Pendientes</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#FFB800' }}>{totalPendientes}</span>
+          </div>
+
+          <div style={{ backgroundColor: '#141414', border: '1px solid #25D366', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Completadas</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#25D366' }}>{totalCompletados}</span>
+          </div>
+
+          <div style={{ backgroundColor: '#141414', border: '1px solid #E50914', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Canceladas</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#E50914' }}>{totalCancelados}</span>
+          </div>
+
+          <div style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total Pedidos</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#FFF' }}>{pedidos.length}</span>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <h2 style={{ fontSize: '22px', fontWeight: 'bold', margin: 0 }}>Historial de Pedidos</h2>
           <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ backgroundColor: '#1A1A1A', color: '#FFF', border: '1px solid #333', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', outline: 'none' }}>
@@ -336,9 +366,9 @@ export default function HistorialPedidos() {
                     <span style={{ backgroundColor: '#222', color: '#888', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #333' }}>
                       {pedido.origen || 'Web'}
                     </span>
-                    {pedido.fechaCita && (
+                    {(pedido.fechaCita || pedido.fechaInstalacion) && (
                       <span style={{ backgroundColor: '#382D1C', color: '#FFB800', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #FFB800', fontWeight: 'bold' }}>
-                         Cita: {pedido.fechaCita} ({pedido.horaCita})
+                         Cita: {pedido.fechaCita || pedido.fechaInstalacion} ({pedido.horaCita || pedido.horaInstalacion})
                       </span>
                     )}
                   </div>
@@ -349,9 +379,9 @@ export default function HistorialPedidos() {
                       onChange={(e) => handleCambiarEstado(pedido.id, e.target.value)}
                       style={{ backgroundColor: '#1A1A1A', color: '#FFB800', border: '1px solid #333', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold' }}
                     >
-                      <option value="Pendiente"> Pendiente</option>
-                      <option value="Completado"> Completado</option>
-                      <option value="Cancelado"> Cancelado</option>
+                      <option value="Pendiente">Pendiente</option>
+                      <option value="Completado">Completado</option>
+                      <option value="Cancelado">Cancelado</option>
                     </select>
 
                     <button
@@ -382,7 +412,7 @@ export default function HistorialPedidos() {
                                   `*Productos:* ${pedido.detalles}\n` +
                                   `*Envío / Zona:* ${pedido.direccion}\n` +
                                   `*Método de Pago:* ${pedido.metodoPago || 'Pago Contra Entrega'}\n` +
-                                  (pedido.fechaCita ? `*Cita en Taller:* ${pedido.fechaCita} a las ${pedido.horaCita}\n` : '') +
+                                  (pedido.fechaCita || pedido.fechaInstalacion ? `*Cita en Taller:* ${pedido.fechaCita || pedido.fechaInstalacion} a las ${pedido.horaCita || pedido.horaInstalacion}\n` : '') +
                                   `*TOTAL A PAGAR:* RD$ ${pedido.total}\n\n` +
                                   ` *CUENTAS BANCARIAS PARA TRANSFERENCIA:*\n` +
                                   `• Banco Popular DOP: Cta. Ahorros N° 814423729\n` +
@@ -556,7 +586,7 @@ export default function HistorialPedidos() {
                 </select>
               </div>
 
-              {/* REQUIERE INSTALACIÓN Y CITAS (REGLA DE SOLO SÁBADOS & TURNOS 1PM / 4PM) */}
+              {/* REQUIERE INSTALACIÓN Y CITAS */}
               <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#FFB800' }}>
                   <input
@@ -579,7 +609,7 @@ export default function HistorialPedidos() {
                         onChange={(e) => {
                           const f = e.target.value;
                           if (f && !esSabado(f)) {
-                            alert("⚠️ Citas no disponibles en esta fecha. Las instalaciones se realizan únicamente los SÁBADOS.");
+                            alert("Citas no disponibles en esta fecha. Las instalaciones se realizan únicamente los SÁBADOS.");
                             setFechaCita('');
                           } else {
                             setFechaCita(f);
@@ -679,7 +709,7 @@ export default function HistorialPedidos() {
                   disabled={guardandoPedido || itemsSeleccionados.length === 0}
                   style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', opacity: (guardandoPedido || itemsSeleccionados.length === 0) ? 0.5 : 1 }}
                 >
-                  {guardandoPedido ? 'Guardando...' : ' Confirmar, Descontar Stock & Guardar Cita'}
+                  {guardandoPedido ? 'Guardando...' : 'Confirmar, Descontar Stock & Guardar Cita'}
                 </button>
               </div>
             </form>
