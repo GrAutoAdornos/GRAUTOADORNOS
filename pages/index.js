@@ -550,7 +550,7 @@ export default function Home() {
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFF', margin: 0 }}>Tu Carrito de Compras</h2>
-                <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}></button>
+                 <button onClick={() => setIsCartOpen(false)} style={{ backgroundColor: 'transparent', color: '#888', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>   
               </div>
 
               {cart.length === 0 ? (
