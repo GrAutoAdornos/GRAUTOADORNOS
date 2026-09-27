@@ -128,14 +128,26 @@ export default function AnaliticasDashboard() {
       const esCompletado = ['completado', 'entregado', 'enviado'].includes(estadoNormalizado);
       const esPendiente = ['pendiente', 'en proceso', 'por pagar', 'procesando'].includes(estadoNormalizado);
 
-      // --- 0. PROCESAR CANALES Y CITAS (Aplica a todos los pedidos) ---
-      const esManualOWhatsApp = p.esManual || p.origenWhatsApp || p.canal === 'whatsapp' || p.origen === 'whatsapp';
+      // --- DETECCIÓN ROBUSTA DE CANAL MANUAL / WHATSAPP ---
+      const origenStr = (p.origen || p.canal || p.metodo || p.tipo || '').toString().toLowerCase();
+      
+      const esManualOWhatsApp = 
+        Boolean(p.esManual) || 
+        Boolean(p.origenWhatsApp) || 
+        Boolean(p.esWhatsApp) ||
+        origenStr.includes('whatsapp') || 
+        origenStr.includes('manual') || 
+        origenStr.includes('vendedor') ||
+        origenStr.includes('local') ||
+        origenStr.includes('tienda');
+
       if (esManualOWhatsApp) {
         countWhatsapp += 1;
       } else {
         countWeb += 1;
       }
 
+      // --- DETECCIÓN DE CITAS / INSTALACIONES ---
       if (p.requiereInstalacion || p.fechaCita || p.horaCita) {
         countCitasTotales += 1;
         if (p.fechaCita === strProximoSabado) {
