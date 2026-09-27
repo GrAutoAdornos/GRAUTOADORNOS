@@ -1,7 +1,7 @@
 // pages/admin/citas.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
@@ -10,6 +10,16 @@ export default function CitasAdmin() {
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState('TODAS'); // 'TODAS', 'PENDIENTES', 'COMPLETADAS'
+
+  // Estado para el formulario de cita manual
+  const [mostrarModal, setMostrarModal] = useState(false);
+  const [nuevaCita, setNuevaCita] = useState({
+    cliente: '',
+    telefono: '',
+    fechaInstalacion: '',
+    horaInstalacion: '1:00 PM',
+    detalles: 'Instalación Manual Admin'
+  });
 
   useEffect(() => {
     if (!localStorage.getItem('adminAuth')) {
@@ -26,14 +36,20 @@ export default function CitasAdmin() {
       const list = [];
       snap.forEach((d) => {
         const data = d.data();
-        // Verificamos si tiene fecha de cita registrada
-        if (data.fechaCita) {
+        
+        // 🚨 NORMALIZACIÓN: Verificamos ambas opciones (fechaInstalacion o fechaCita)
+        const fecha = data.fechaInstalacion || data.fechaCita;
+        const hora = data.horaInstalacion || data.horaCita;
+
+        if (fecha) {
           list.push({ 
             id: d.id, 
             clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
             telefono: data.telefono || data.phone || '',
             detalles: data.detalles || data.productos || 'Sin detalles',
             estadoCita: data.estadoCita || 'Pendiente',
+            fechaCita: fecha,
+            horaCita: hora || 'Hora por definir',
             ...data 
           });
         }
@@ -52,7 +68,6 @@ export default function CitasAdmin() {
       const refPedido = doc(db, 'pedidos', idPedido);
       await updateDoc(refPedido, { estadoCita: nuevoEstado });
 
-      // Actualizar estado local
       setCitas((prev) =>
         prev.map((c) => (c.id === idPedido ? { ...c, estadoCita: nuevoEstado } : c))
       );
@@ -61,7 +76,45 @@ export default function CitasAdmin() {
     }
   };
 
-  // Filtrado de citas
+  // Crear una cita manual guardando AMBOS formatos para evitar fallos de lectura
+  const crearCitaManual = async (e) => {
+    e.preventDefault();
+    if (!nuevaCita.cliente || !nuevaCita.fechaInstalacion) {
+      alert("Por favor completa el nombre y la fecha.");
+      return;
+    }
+
+    try {
+      const nuevoDoc = {
+        cliente: nuevaCita.cliente,
+        telefono: nuevaCita.telefono,
+        detalles: nuevaCita.detalles,
+        estadoCita: 'Pendiente',
+        // 🚨 Guardamos con ambos nombres para que sea compatible con index.js y citas.js
+        fechaInstalacion: nuevaCita.fechaInstalacion,
+        horaInstalacion: nuevaCita.horaInstalacion,
+        fechaCita: nuevaCita.fechaInstalacion,
+        horaCita: nuevaCita.horaInstalacion,
+        creadoEn: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'pedidos'), nuevoDoc);
+      alert("¡Cita manual registrada con éxito!");
+      setMostrarModal(false);
+      setNuevaCita({
+        cliente: '',
+        telefono: '',
+        fechaInstalacion: '',
+        horaInstalacion: '1:00 PM',
+        detalles: 'Instalación Manual Admin'
+      });
+      cargarCitas(); // Recargar la lista
+    } catch (error) {
+      console.error("Error al guardar la cita manual:", error);
+      alert("Hubo un error al guardar la cita.");
+    }
+  };
+
   const citasFiltradas = citas.filter((c) => {
     if (filtroEstado === 'PENDIENTES') return c.estadoCita === 'Pendiente';
     if (filtroEstado === 'COMPLETADAS') return c.estadoCita === 'Completada';
@@ -86,8 +139,13 @@ export default function CitasAdmin() {
             <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#888' }}>Organiza las instalaciones en el taller para el técnico y los clientes.</p>
           </div>
 
-          {/* Filtros rápidos */}
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setMostrarModal(true)}
+              style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E50914', color: '#FFF', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              ➕ Cita Manual
+            </button>
             <button
               onClick={() => setFiltroEstado('TODAS')}
               style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #333', backgroundColor: filtroEstado === 'TODAS' ? '#E50914' : '#141414', color: '#FFF', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -108,6 +166,61 @@ export default function CitasAdmin() {
             </button>
           </div>
         </div>
+
+        {/* Modal de Agendar Cita Manual */}
+        {mostrarModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div style={{ backgroundColor: '#141414', padding: '25px', borderRadius: '10px', width: '100%', maxWidth: '400px', border: '1px solid #E50914' }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#FFF' }}>Agendar Cita Manual</h3>
+              <form onSubmit={crearCitaManual} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <input
+                  type="text"
+                  placeholder="Nombre del Cliente"
+                  value={nuevaCita.cliente}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, cliente: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Teléfono"
+                  value={nuevaCita.telefono}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, telefono: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                />
+                <input
+                  type="date"
+                  value={nuevaCita.fechaInstalacion}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, fechaInstalacion: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                  required
+                />
+                <select
+                  value={nuevaCita.horaInstalacion}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, horaInstalacion: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px' }}
+                >
+                  <option value="1:00 PM">1:00 PM</option>
+                  <option value="4:00 PM">4:00 PM</option>
+                </select>
+                <textarea
+                  placeholder="Detalles / Servicio"
+                  value={nuevaCita.detalles}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, detalles: e.target.value })}
+                  style={{ width: '100%', padding: '10px', backgroundColor: '#0D0D0D', border: '1px solid #333', color: '#FFF', borderRadius: '6px', minHeight: '60px' }}
+                />
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button type="submit" style={{ flex: 1, backgroundColor: '#E50914', color: '#FFF', padding: '10px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Guardar Cita
+                  </button>
+                  <button type="button" onClick={() => setMostrarModal(false)} style={{ flex: 1, backgroundColor: '#333', color: '#FFF', padding: '10px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <p style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Cargando agenda de citas...</p>
@@ -132,13 +245,13 @@ export default function CitasAdmin() {
                       padding: '18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      justifyContent: 'space-between'
+                      justify: 'space-between'
                     }}
                   >
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <span style={{ fontSize: '12px', color: '#FFB800', fontWeight: 'bold' }}>
-                          📅 {c.fechaCita} - 🕒 {c.horaCita || 'Hora por definir'}
+                          📅 {c.fechaCita} - 🕒 {c.horaCita}
                         </span>
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: esCompletada ? '#1C3829' : '#382D1C', color: esCompletada ? '#25D366' : '#FFB800', fontWeight: 'bold' }}>
                           {c.estadoCita || 'Pendiente'}
