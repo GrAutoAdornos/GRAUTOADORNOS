@@ -1,56 +1,8 @@
 // pages/admin/pedidos.js
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
-export default function HistorialPedidos() {
-  const [pedidos, setPedidos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filtroEstado, setFiltroEstado] = useState('Todos');
-
-  // Estados para el Modal de Crear Pedido Manual
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [productosInventario, setProductosInventario] = useState([]);
-  
-  // Estados para la fecha y disponibilidad de citas
-  const [fechaCita, setFechaCita] = useState('');
-  const [horaCita, setHoraCita] = useState('');
-  const [horariosOcupados, setHorariosOcupados] = useState([]);
-
-  // Consultar disponibilidad cuando cambia la fecha seleccionada
-  useEffect(() => {
-    const verificarDisponibilidad = async () => {
-      if (!fechaCita) {
-        setHorariosOcupados([]);
-        return;
-      }
-
-      try {
-        const q = query(
-          collection(db, 'pedidos'),
-          where('fechaCita', '==', fechaCita)
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const horasOcupadas = [];
-        
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.horaCita && data.estado !== 'Cancelado') {
-            horasOcupadas.push(data.horaCita);
-          }
-        });
-
-        setHorariosOcupados(horasOcupadas);
-      } catch (error) {
-        console.error("Error al consultar disponibilidad de citas:", error);
-      }
-    };
-
-    verificarDisponibilidad();
-  }, [fechaCita]); // <-- ¡No olvides poner [fechaCita] aquí!
-
-  // Resto de tus estados y funciones...
 export default function HistorialPedidos() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
