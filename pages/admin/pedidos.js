@@ -309,6 +309,12 @@ export default function HistorialPedidos() {
           >
             ➕ Nuevo Pedido Manual
           </button>
+              <button
+  onClick={() => window.print()}
+  style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+>
+  📄 Exportar Reporte de Ventas (PDF)
+</button>
           <button onClick={() => window.location.href = '/admin/dashboard'} style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
             Volver al Panel
           </button>
