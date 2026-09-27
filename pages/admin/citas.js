@@ -208,8 +208,7 @@ const exportarCitasPDF = () => {
             >
               Completadas
             </button>
-                // Botón para la vista
-<button
+          <button
   onClick={exportarCitasPDF}
   style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
 >
