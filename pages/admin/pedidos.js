@@ -11,6 +11,12 @@ export default function HistorialPedidos() {
   // Estados para el Modal de Crear Pedido Manual (Idéntico a la Web)
   const [mostrarModal, setMostrarModal] = useState(false);
   const [productosInventario, setProductosInventario] = useState([]);
+  
+  // Selección de Tipo de Cliente (Nuevo vs Existente)
+  const [tipoCliente, setTipoCliente] = useState('nuevo'); // 'nuevo' o 'existente'
+  const [listaClientesCRM, setListaClientesCRM] = useState([]);
+  const [clienteExistenteSeleccionado, setClienteExistenteSeleccionado] = useState('');
+
   const [nombreCliente, setNombreCliente] = useState('');
   const [telefonoCliente, setTelefonoCliente] = useState('');
   const [correoCliente, setCorreoCliente] = useState('');
@@ -48,10 +54,36 @@ export default function HistorialPedidos() {
     try {
       const querySnapshot = await getDocs(collection(db, 'pedidos'));
       const list = [];
+      const mapaClientes = {};
+
       querySnapshot.forEach((documento) => {
-        list.push({ id: documento.id, ...documento.data() });
+        const data = documento.data();
+        list.push({ id: documento.id, ...data });
+
+        // Extraer y agrupar clientes para la lista desplegable de clientes existentes
+        const nombre = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.nombre : null) ||
+                       data.clienteNombre || data.cliente || data.nombre || 'Cliente Sin Nombre';
+        const tel = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.telefono : null) ||
+                    data.telefono || data.phone || data.celular || 'Sin Teléfono';
+        const email = data.correo || data.email || '';
+        const dir = (typeof data.cliente === 'object' && data.cliente !== null ? data.cliente.direccion : null) ||
+                    data.direccion || '';
+
+        const clave = tel !== 'Sin Teléfono' ? tel : nombre;
+
+        if (clave && clave !== 'Cliente Sin Nombre' && !mapaClientes[clave]) {
+          mapaClientes[clave] = {
+            idClave: clave,
+            nombre: nombre,
+            telefono: tel,
+            correo: email,
+            direccion: dir
+          };
+        }
       });
+
       setPedidos(list);
+      setListaClientesCRM(Object.values(mapaClientes));
     } catch (error) {
       console.error("Error al obtener pedidos:", error);
     } finally {
@@ -69,6 +101,25 @@ export default function HistorialPedidos() {
       setProductosInventario(list);
     } catch (error) {
       console.error("Error al cargar inventario:", error);
+    }
+  };
+
+  const handleSeleccionarClienteExistente = (clave) => {
+    setClienteExistenteSeleccionado(clave);
+    if (!clave) {
+      setNombreCliente('');
+      setTelefonoCliente('');
+      setCorreoCliente('');
+      setDireccionCliente('');
+      return;
+    }
+
+    const clienteEncontrado = listaClientesCRM.find((c) => c.idClave === clave);
+    if (clienteEncontrado) {
+      setNombreCliente(clienteEncontrado.nombre);
+      setTelefonoCliente(clienteEncontrado.telefono !== 'Sin Teléfono' ? clienteEncontrado.telefono : '');
+      setCorreoCliente(clienteEncontrado.correo);
+      setDireccionCliente(clienteEncontrado.direccion !== 'Dirección no registrada' ? clienteEncontrado.direccion : '');
     }
   };
 
@@ -132,7 +183,6 @@ export default function HistorialPedidos() {
   const costoEnvio = zonaSeleccionada.costo;
   const totalGeneral = subtotalProductos + costoEnvio;
 
-  // Guardar pedido manual completo (Inventario, Métricas, CRM y Citas)
   const handleCrearPedidoManual = async (e) => {
     e.preventDefault();
     if (!nombreCliente || !telefonoCliente || itemsSeleccionados.length === 0) {
@@ -189,8 +239,10 @@ export default function HistorialPedidos() {
         transaction.set(nuevoPedidoRef, datosPedido);
       });
 
-      alert(`¡Pedido #${orderId} creado con éxito, inventario descontado y registrado en el sistema!`);
+      alert(`¡Pedido #${orderId} creado con éxito para ${nombreCliente}!`);
       setMostrarModal(false);
+      setTipoCliente('nuevo');
+      setClienteExistenteSeleccionado('');
       setNombreCliente('');
       setTelefonoCliente('');
       setCorreoCliente('');
@@ -329,7 +381,7 @@ export default function HistorialPedidos() {
         )}
       </div>
 
-      {/* MODAL PARA CREAR PEDIDO MANUAL CON TODAS LAS OPCIONES DE LA WEB */}
+      {/* MODAL PARA CREAR PEDIDO MANUAL */}
       {mostrarModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -343,12 +395,68 @@ export default function HistorialPedidos() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222', paddingBottom: '12px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <img src="/LOGO NEGRO.jpeg" alt="Logo" style={{ width: '35px', height: '35px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
-                <h3 style={{ margin: 0, color: '#E50914', fontSize: '18px' }}>Registrar Pedido Manual (Estilo Web)</h3>
+                <h3 style={{ margin: 0, color: '#E50914', fontSize: '18px' }}>Registrar Pedido Manual</h3>
               </div>
               <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
             </div>
 
             <form onSubmit={handleCrearPedidoManual} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* SELECTOR DE CLIENTE NUEVO VS EXISTENTE */}
+              <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+                <label style={{ fontSize: '12px', color: '#FFB800', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>
+                  👤 Selección de Cliente:
+                </label>
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <input
+                      type="radio"
+                      name="tipoCliente"
+                      value="nuevo"
+                      checked={tipoCliente === 'nuevo'}
+                      onChange={() => {
+                        setTipoCliente('nuevo');
+                        setClienteExistenteSeleccionado('');
+                        setNombreCliente('');
+                        setTelefonoCliente('');
+                        setCorreoCliente('');
+                        setDireccionCliente('');
+                      }}
+                    />
+                    Cliente Nuevo
+                  </label>
+                  <label style={{ fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <input
+                      type="radio"
+                      name="tipoCliente"
+                      value="existente"
+                      checked={tipoCliente === 'existente'}
+                      onChange={() => setTipoCliente('existente')}
+                    />
+                    Cliente Existente (CRM)
+                  </label>
+                </div>
+
+                {/* DESPLEGABLE DE CLIENTES EXISTENTES */}
+                {tipoCliente === 'existente' && (
+                  <div>
+                    <select
+                      value={clienteExistenteSeleccionado}
+                      onChange={(e) => handleSeleccionarClienteExistente(e.target.value)}
+                      style={{ width: '100%', backgroundColor: '#0D0D0D', border: '1px solid #FFB800', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px', outline: 'none' }}
+                    >
+                      <option value="">-- Selecciona un Cliente Registrado --</option>
+                      {listaClientesCRM.map((c) => (
+                        <option key={c.idClave} value={c.idClave}>
+                          {c.nombre} ({c.telefono})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* CAMPOS DEL CLIENTE */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '5px' }}>Nombre Completo *</label>
@@ -518,7 +626,7 @@ export default function HistorialPedidos() {
                 </div>
               )}
 
-              {/* CUENTAS BANCARIAS INFORMATIVAS EN MODAL */}
+              {/* CUENTAS BANCARIAS */}
               <div style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222', fontSize: '11px', color: '#888' }}>
                 <strong style={{ color: '#FFB800' }}>Cuentas bancarias que se incluirán en la factura:</strong>
                 <p style={{ margin: '3px 0 0 0' }}>Banco Popular: 814423729 | Banreservas: 9605170252 | BHD: 39485910015 | Zelle: Landra2916@gmail.com</p>
