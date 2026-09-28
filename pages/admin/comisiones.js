@@ -40,19 +40,19 @@ export default function ReporteComisionesTecnicos() {
     snapPedidos.forEach((docSnap) => {
       const data = docSnap.data() || {};
       
-      // Estado normalizado de la cita
+      // Estado normalizado
       const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
       
-      // EXCLUSIÓN: Descartar si está cancelado o rechazado
+      // EXCLUSIÓN 1: Descartar estados cancelados / rechazados
       if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
 
-      // CÁLCULO DE MANO DE OBRA POR ÍTEMS O DOCUMENTO
-      let manoObra = 0;
+      // CÁLCULO DIRECTO DEL COSTO DE INSTALACIÓN (BASE DE LA COMISIÓN)
+      let costoInstalacion = 0;
 
+      // Intentar extraer de la lista de productos
       if (Array.isArray(data.productos) && data.productos.length > 0) {
         data.productos.forEach((p) => {
           const cant = Number(p.cantidad || 1);
-          // Buscar costoInstalacion / precioInstalacion / instalacion en cada item del carrito
           const instProd = Number(
             p.costoInstalacion ?? 
             p.precioInstalacion ?? 
@@ -60,13 +60,13 @@ export default function ReporteComisionesTecnicos() {
             p.precioManoObra ?? 
             0
           );
-          manoObra += instProd * cant;
+          costoInstalacion += instProd * cant;
         });
       }
 
-      // Si no se encontró valor en el desglose de productos, buscar a nivel de pedido
-      if (manoObra === 0) {
-        manoObra = Number(
+      // Si sigue en 0, buscar en el nivel raíz del documento
+      if (costoInstalacion === 0) {
+        costoInstalacion = Number(
           data.costoInstalacion ?? 
           data.precioInstalacion ?? 
           data.montoInstalacion ?? 
@@ -74,6 +74,9 @@ export default function ReporteComisionesTecnicos() {
           0
         );
       }
+
+      // EXCLUSIÓN 2: Descartar registros sin costo de instalación (elimina registros vacíos como el de Owen)
+      if (costoInstalacion <= 0) return;
 
       // Buscar técnico asignado
       let tecObj = listaTec.find(t => t.id === data.tecnicoId);
@@ -90,8 +93,8 @@ export default function ReporteComisionesTecnicos() {
         porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
       }
 
-      // CALCULO DE COMISIÓN (% sobre Mano de Obra)
-      const montoComision = (manoObra * porcentaje) / 100;
+      // CALCULO DE COMISIÓN DE TÉCNICOS (% sobre Costo de Instalación)
+      const montoComision = (costoInstalacion * porcentaje) / 100;
 
       // Resumen del Vehículo / Producto
       let detalleTrabajo = data.detalles || data.vehiculo;
@@ -112,7 +115,7 @@ export default function ReporteComisionesTecnicos() {
         vehiculoServicio: detalleTrabajo || 'Servicio de Instalación',
         tecnicoId: tecnicoId,
         tecnicoNombre: tecnicoNombre,
-        manoObra: manoObra,
+        costoInstalacion: costoInstalacion,
         porcentajeComision: porcentaje,
         montoComision: montoComision,
         estadoCita: estadoCita,
@@ -149,7 +152,7 @@ export default function ReporteComisionesTecnicos() {
   });
 
   // Totales
-  const totalManoObra = citasFiltradas.reduce((acc, c) => acc + c.manoObra, 0);
+  const totalCostoInstalacion = citasFiltradas.reduce((acc, c) => acc + c.costoInstalacion, 0);
   const totalComisiones = citasFiltradas.reduce((acc, c) => acc + c.montoComision, 0);
 
   const tecObjSeleccionado = tecnicos.find(t => t.id === tecnicoFiltro);
@@ -181,7 +184,7 @@ export default function ReporteComisionesTecnicos() {
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Control de Comisiones de Técnicos</h1>
-          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Cálculo exacto sobre mano de obra / instalación</p>
+          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Cálculo exacto basado en el costo de instalación</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link href="/admin/citas">
@@ -280,7 +283,7 @@ export default function ReporteComisionesTecnicos() {
               <tr style={{ backgroundColor: '#222', color: '#FFF', textAlign: 'left' }}>
                 <th style={{ padding: '10px', fontSize: '12px' }}>Fecha</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>Cliente / Trabajo</th>
-                <th style={{ padding: '10px', fontSize: '12px' }}>Mano de Obra</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Costo Instalación</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>% Com.</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>Comisión a Pagar</th>
               </tr>
@@ -290,7 +293,7 @@ export default function ReporteComisionesTecnicos() {
                 <tr key={item.id} style={{ borderBottom: '1px solid #333', fontSize: '13px' }}>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.fecha}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculoServicio}</td>
-                  <td style={{ padding: '10px' }} className="texto-impresion">RD$ {item.manoObra.toLocaleString()}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">RD$ {item.costoInstalacion.toLocaleString()}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.porcentajeComision}%</td>
                   <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">
                     RD$ {item.montoComision.toLocaleString()}
@@ -317,7 +320,7 @@ export default function ReporteComisionesTecnicos() {
           </div>
         </div>
       ) : (
-        /* VISTA DE TABLA CON COLORES INVERTIDOS (VERDE COMPLETADA / ROJO PENDIENTE) */
+        /* VISTA DE TABLA PRINCIPAL */
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
@@ -326,8 +329,8 @@ export default function ReporteComisionesTecnicos() {
             </div>
 
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Mano de Obra</p>
-              <h3 style={{ margin: '5px 0 0 0', color: '#25D366', fontSize: '22px' }}>RD$ {totalManoObra.toLocaleString()}</h3>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Costo Instalación</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#25D366', fontSize: '22px' }}>RD$ {totalCostoInstalacion.toLocaleString()}</h3>
             </div>
 
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #E50914' }}>
@@ -346,7 +349,7 @@ export default function ReporteComisionesTecnicos() {
                   <th style={{ padding: '12px', fontSize: '13px' }}>Cliente / Trabajo</th>
                   <th style={{ padding: '12px', fontSize: '13px' }}>Técnico</th>
                   <th style={{ padding: '12px', fontSize: '13px' }}>Estado Cita</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Mano de Obra</th>
+                  <th style={{ padding: '12px', fontSize: '13px' }}>Costo Instalación</th>
                   <th style={{ padding: '12px', fontSize: '13px' }}>% Com.</th>
                   <th style={{ padding: '12px', fontSize: '13px' }}>Comisión</th>
                   <th style={{ padding: '12px', fontSize: '13px' }} className="no-print">Pago Técnico</th>
@@ -383,7 +386,7 @@ export default function ReporteComisionesTecnicos() {
                       </td>
 
                       <td style={{ padding: '12px', fontSize: '13px', color: '#25D366', fontWeight: 'bold' }}>
-                        RD$ {item.manoObra.toLocaleString()}
+                        RD$ {item.costoInstalacion.toLocaleString()}
                       </td>
                       <td style={{ padding: '12px', fontSize: '13px' }}>{item.porcentajeComision}%</td>
                       <td style={{ padding: '12px', fontSize: '13px', fontWeight: 'bold', color: '#E50914' }}>
@@ -412,7 +415,7 @@ export default function ReporteComisionesTecnicos() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No se encontraron registros.
+                      No se encontraron registros válidos.
                     </td>
                   </tr>
                 )}
