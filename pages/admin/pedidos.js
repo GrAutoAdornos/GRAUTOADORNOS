@@ -1,6 +1,6 @@
 // pages/admin/pedidos.js
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 export default function HistorialPedidos() {
@@ -40,7 +40,7 @@ export default function HistorialPedidos() {
   // Método de Pago
   const [metodoPago, setMetodoPago] = useState('Pago Contra Entrega');
 
-  // Ítems seleccionados
+  // Ítems seleccionados (se manejan como unidades físicas individuales)
   const [itemsSeleccionados, setItemsSeleccionados] = useState([]);
   const [guardandoPedido, setGuardandoPedido] = useState(false);
 
@@ -176,49 +176,40 @@ export default function HistorialPedidos() {
     }
   };
 
+  // Agregar 1 unidad individual al pedido
   const agregarProductoAlPedido = (producto) => {
-    setItemsSeleccionados((prev) => {
-      const existe = prev.find((item) => item.id === producto.id);
-      if (existe) {
-        return prev.map((item) =>
-          item.id === producto.id
-            ? { ...item, cantidadSeleccionada: Math.min(item.cantidadSeleccionada + 1, producto.stock ?? 99) }
-            : item
-        );
-      } else {
-        return [...prev, { 
-          ...producto, 
-          cantidadSeleccionada: 1,
-          requiereInstalacion: false,
-          costoInstalacion: Number(producto.precioInstalacion || 0),
-          fechaCita: '',
-          horaCita: ''
-        }];
-      }
-    });
+    const unidadesExistentes = itemsSeleccionados.filter(i => i.productoId === producto.id).length;
+    const stockDisponible = producto.stock ?? 99;
+
+    if (unidadesExistentes >= stockDisponible) {
+      alert("No hay suficiente stock disponible para agregar otra unidad.");
+      return;
+    }
+
+    const nuevaUnidad = {
+      instanceId: `${producto.id}_${Date.now()}_${Math.random()}`,
+      productoId: producto.id,
+      nombre: producto.nombre || producto.titulo,
+      precio: Number(producto.precio || producto.price || 0),
+      requiereInstalacion: false,
+      costoInstalacion: Number(producto.precioInstalacion || 0),
+      fechaCita: '',
+      horaCita: ''
+    };
+
+    setItemsSeleccionados((prev) => [...prev, nuevaUnidad]);
   };
 
-  const cambiarCantidadItem = (id, delta) => {
-    setItemsSeleccionados((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const nuevaCant = item.cantidadSeleccionada + delta;
-          if (nuevaCant <= 0) return null;
-          if (nuevaCant > (item.stock ?? 99)) {
-            alert("No hay suficiente stock disponible.");
-            return item;
-          }
-          return { ...item, cantidadSeleccionada: nuevaCant };
-        }
-        return item;
-      }).filter(Boolean)
-    );
+  // Eliminar una unidad física específica
+  const eliminarUnidad = (instanceId) => {
+    setItemsSeleccionados((prev) => prev.filter((item) => item.instanceId !== instanceId));
   };
 
-  const actualizarItemInstalacion = (id, campo, valor) => {
+  // Actualizar la instalación de una unidad específica
+  const actualizarItemInstalacion = (instanceId, campo, valor) => {
     setItemsSeleccionados((prev) =>
       prev.map((item) => {
-        if (item.id === id) {
+        if (item.instanceId === instanceId) {
           return { ...item, [campo]: valor };
         }
         return item;
@@ -227,7 +218,7 @@ export default function HistorialPedidos() {
   };
 
   // Cálculos dinámicos
-  const subtotalProductos = itemsSeleccionados.reduce((acc, item) => acc + (Number(item.precio || item.price || 0) * item.cantidadSeleccionada), 0);
+  const subtotalProductos = itemsSeleccionados.reduce((acc, item) => acc + item.precio, 0);
   const totalInstalaciones = itemsSeleccionados.reduce((acc, item) => acc + (item.requiereInstalacion ? Number(item.costoInstalacion || 0) : 0), 0);
   
   // Si al menos un ítem requiere instalación, el envío es GRATIS (RD$ 0)
@@ -246,11 +237,11 @@ export default function HistorialPedidos() {
     const itemsConInstalacion = itemsSeleccionados.filter(item => item.requiereInstalacion);
     for (const item of itemsConInstalacion) {
       if (!item.fechaCita || !item.horaCita) {
-        alert(`Por favor selecciona la fecha y hora de instalación para: ${item.nombre || item.titulo}`);
+        alert(`Por favor selecciona la fecha y hora de instalación para la unidad de: ${item.nombre}`);
         return;
       }
       if (!esSabado(item.fechaCita)) {
-        alert(`La fecha de instalación para "${item.nombre || item.titulo}" debe ser un SÁBADO.`);
+        alert(`La fecha de instalación para "${item.nombre}" debe ser un SÁBADO.`);
         return;
       }
     }
@@ -259,13 +250,11 @@ export default function HistorialPedidos() {
     try {
       // Validar límite de 2 instalaciones por sábado
       if (itemsConInstalacion.length > 0) {
-        // Agrupar fechas seleccionadas en este pedido
         const mapaFechasNuevas = {};
         itemsConInstalacion.forEach(i => {
           mapaFechasNuevas[i.fechaCita] = (mapaFechasNuevas[i.fechaCita] || 0) + 1;
         });
 
-        // Verificar con la base de datos
         for (const fecha of Object.keys(mapaFechasNuevas)) {
           let totalExistentes = 0;
           pedidos.forEach(p => {
@@ -289,9 +278,11 @@ export default function HistorialPedidos() {
       }
 
       const orderId = Math.floor(100000 + Math.random() * 900000).toString();
-      const detallesTexto = itemsSeleccionados.map(i => {
-        let txt = `${i.cantidadSeleccionada}x ${i.nombre || i.titulo}`;
-        if (i.requiereInstalacion) txt += ` (Con Instalación: ${i.fechaCita} @ ${i.horaCita})`;
+      
+      // Agrupar ítems para un resumen de texto comprensible
+      const detallesTexto = itemsSeleccionados.map((i, index) => {
+        let txt = `1x ${i.nombre}`;
+        if (i.requiereInstalacion) txt += ` (Instalación Cita #${index + 1}: ${i.fechaCita} @ ${i.horaCita})`;
         return txt;
       }).join(', ');
 
@@ -299,6 +290,12 @@ export default function HistorialPedidos() {
       const vendedorObj = listaVendedores.find(v => v.id === vendedorSeleccionado);
       const porcentajeComision = vendedorObj ? Number(vendedorObj.porcentajeDefecto || 5) : 0;
       const montoComision = (subtotalProductos * porcentajeComision) / 100;
+
+      // Agrupar conteo por ID para descontar stock en Firebase
+      const mapaStockADescontar = {};
+      itemsSeleccionados.forEach(i => {
+        mapaStockADescontar[i.productoId] = (mapaStockADescontar[i.productoId] || 0) + 1;
+      });
 
       const datosPedido = {
         orderId: orderId,
@@ -330,13 +327,14 @@ export default function HistorialPedidos() {
       };
 
       await runTransaction(db, async (transaction) => {
-        for (const item of itemsSeleccionados) {
-          const prodRef = doc(db, 'productos', item.id);
+        for (const prodId of Object.keys(mapaStockADescontar)) {
+          const cantidadPedida = mapaStockADescontar[prodId];
+          const prodRef = doc(db, 'productos', prodId);
           const prodDoc = await transaction.get(prodRef);
-          if (!prodDoc.exists()) throw new Error(`El producto ya no existe.`);
+          if (!prodDoc.exists()) throw new Error(`Uno de los productos seleccionados ya no existe.`);
           const stockActual = Number(prodDoc.data().stock ?? 0);
-          if (stockActual < item.cantidadSeleccionada) throw new Error(`Stock insuficiente para ${item.nombre || item.titulo}.`);
-          transaction.update(prodRef, { stock: stockActual - item.cantidadSeleccionada });
+          if (stockActual < cantidadPedida) throw new Error(`Stock insuficiente.`);
+          transaction.update(prodRef, { stock: stockActual - cantidadPedida });
         }
 
         const nuevoPedidoRef = doc(collection(db, 'pedidos'));
@@ -409,33 +407,33 @@ export default function HistorialPedidos() {
           GR Pedidos & Facturas
         </h1>
         <div style={{ display: 'flex', gap: '10px' }}>
-           <button
-  onClick={() => window.location.href = '/admin/comisiones-vendedores'}
-  style={{
-    backgroundColor: '#000000',
-    color: '#FFF',
-    border: '2px solid #E50914',
-    padding: '8px 14px',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    transition: 'all 0.2s ease-in-out'
-  }}
-  onMouseOver={(e) => {
-    e.currentTarget.style.backgroundColor = '#E50914';
-    e.currentTarget.style.color = '#FFF';
-  }}
-  onMouseOut={(e) => {
-    e.currentTarget.style.backgroundColor = '#000000';
-    e.currentTarget.style.color = '#FFF';
-  }}
->
-  💸 Comisiones Vendedores
-</button>
+          <button
+            onClick={() => window.location.href = '/admin/comisiones-vendedores'}
+            style={{
+              backgroundColor: '#000000',
+              color: '#FFF',
+              border: '2px solid #E50914',
+              padding: '8px 14px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.2s ease-in-out'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#E50914';
+              e.currentTarget.style.color = '#FFF';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#000000';
+              e.currentTarget.style.color = '#FFF';
+            }}
+          >
+             Comisiones Vendedores
+          </button>
           <button
             onClick={() => setMostrarModal(true)}
             style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
@@ -764,39 +762,46 @@ export default function HistorialPedidos() {
                         onClick={() => agregarProductoAlPedido(prod)}
                         style={{ backgroundColor: '#222', color: '#25D366', border: '1px solid #25D366', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
                       >
-                         Agregar
+                        + Agregar Unidad
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* CARRITO Y CONFIGURACIÓN DE INSTALACIÓN POR ÍTEM */}
+              {/* CARRITO Y CONFIGURACIÓN DE INSTALACIÓN INDIVIDUAL POR UNIDAD FÍSICA */}
               {itemsSeleccionados.length > 0 && (
                 <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#FFF', display: 'block', marginBottom: '10px' }}>Ítems en el Pedido e Instalaciones:</label>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#FFF', display: 'block', marginBottom: '10px' }}>Unidades en el Pedido e Instalaciones Individuales:</label>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
-                    {itemsSeleccionados.map((item) => (
-                      <div key={item.id} style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222' }}>
+                    {itemsSeleccionados.map((item, index) => (
+                      <div key={item.instanceId} style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.nombre || item.titulo} (x{item.cantidadSeleccionada})</span>
+                          <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#FFF' }}>
+                            {item.nombre} <span style={{ color: '#E50914', fontSize: '11px' }}>(Unidad #{index + 1})</span>
+                          </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '13px', color: '#25D366', fontWeight: 'bold' }}>RD$ {(Number(item.precio || item.price || 0) * item.cantidadSeleccionada).toLocaleString()}</span>
-                            <button type="button" onClick={() => cambiarCantidadItem(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '22px', height: '22px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
-                            <button type="button" onClick={() => cambiarCantidadItem(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '22px', height: '22px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
+                            <span style={{ fontSize: '13px', color: '#25D366', fontWeight: 'bold' }}>RD$ {item.precio.toLocaleString()}</span>
+                            <button
+                              type="button"
+                              onClick={() => eliminarUnidad(item.instanceId)}
+                              style={{ backgroundColor: '#330000', color: '#FF4D4D', border: '1px solid #FF4D4D', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              Quitar
+                            </button>
                           </div>
                         </div>
 
-                        {/* CHECKBOX DE INSTALACIÓN POR ÍTEM */}
+                        {/* CHECKBOX DE INSTALACIÓN POR UNIDAD INDIVIDUAL */}
                         <div style={{ borderTop: '1px solid #222', paddingTop: '8px', marginTop: '6px' }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#FFB800', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
                               checked={item.requiereInstalacion || false}
-                              onChange={(e) => actualizarItemInstalacion(item.id, 'requiereInstalacion', e.target.checked)}
+                              onChange={(e) => actualizarItemInstalacion(item.instanceId, 'requiereInstalacion', e.target.checked)}
                             />
-                             ¿Este producto requiere instalación?
+                            ¿Esta unidad requiere instalación?
                           </label>
 
                           {item.requiereInstalacion && (
@@ -806,7 +811,7 @@ export default function HistorialPedidos() {
                                 <input
                                   type="number"
                                   value={item.costoInstalacion || 0}
-                                  onChange={(e) => actualizarItemInstalacion(item.id, 'costoInstalacion', Number(e.target.value))}
+                                  onChange={(e) => actualizarItemInstalacion(item.instanceId, 'costoInstalacion', Number(e.target.value))}
                                   style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
                                 />
                               </div>
@@ -819,9 +824,9 @@ export default function HistorialPedidos() {
                                     const f = e.target.value;
                                     if (f && !esSabado(f)) {
                                       alert("Las instalaciones solo se realizan los SÁBADOS.");
-                                      actualizarItemInstalacion(item.id, 'fechaCita', '');
+                                      actualizarItemInstalacion(item.instanceId, 'fechaCita', '');
                                     } else {
-                                      actualizarItemInstalacion(item.id, 'fechaCita', f);
+                                      actualizarItemInstalacion(item.instanceId, 'fechaCita', f);
                                     }
                                   }}
                                   style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
@@ -831,7 +836,7 @@ export default function HistorialPedidos() {
                                 <label style={{ fontSize: '10px', color: '#AAA', display: 'block' }}>Hora de Cita</label>
                                 <select
                                   value={item.horaCita || ''}
-                                  onChange={(e) => actualizarItemInstalacion(item.id, 'horaCita', e.target.value)}
+                                  onChange={(e) => actualizarItemInstalacion(item.instanceId, 'horaCita', e.target.value)}
                                   style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
                                 >
                                   <option value="">-- Hora --</option>
@@ -849,7 +854,7 @@ export default function HistorialPedidos() {
                   {/* RESUMEN FINANCIERO */}
                   <div style={{ borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA' }}>
-                      <span>Subtotal Productos:</span>
+                      <span>Subtotal Productos ({itemsSeleccionados.length} unidades):</span>
                       <span style={{ color: '#FFF', fontWeight: 'bold' }}>RD$ {subtotalProductos.toLocaleString()}</span>
                     </div>
 
@@ -983,11 +988,11 @@ export default function HistorialPedidos() {
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '8px', textAlign: 'center' }}>{item.cantidadSeleccionada}</td>
+                        <td style={{ padding: '8px', textAlign: 'center' }}>1</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>RD$ {Number(item.precio || item.price || 0).toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>{item.requiereInstalacion ? `RD$ ${Number(item.costoInstalacion || 0).toLocaleString()}` : '-'}</td>
                         <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
-                          RD$ {((Number(item.precio || item.price || 0) * item.cantidadSeleccionada) + (item.requiereInstalacion ? Number(item.costoInstalacion || 0) : 0)).toLocaleString()}
+                          RD$ {((Number(item.precio || item.price || 0)) + (item.requiereInstalacion ? Number(item.costoInstalacion || 0) : 0)).toLocaleString()}
                         </td>
                       </tr>
                     ))
