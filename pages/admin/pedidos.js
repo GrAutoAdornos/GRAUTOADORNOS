@@ -226,7 +226,7 @@ export default function HistorialPedidos() {
   const costoEnvioCalculado = hayInstalacion ? 0 : zonaSeleccionada.costo;
   const totalGeneral = subtotalProductos + totalInstalaciones + costoEnvioCalculado;
 
-  const handleCrearPedidoManual = async (e) => {
+const handleCrearPedidoManual = async (e) => {
     e.preventDefault();
     if (!nombreCliente || !telefonoCliente || itemsSeleccionados.length === 0) {
       alert("Por favor completa el nombre, teléfono y selecciona al menos un producto.");
@@ -326,15 +326,36 @@ export default function HistorialPedidos() {
         montoComisionVendedor: montoComision
       };
 
+      // ✅ TRANSACCIÓN CORREGIDA
       await runTransaction(db, async (transaction) => {
-        for (const prodId of Object.keys(mapaStockADescontar)) {
-          const cantidadPedida = mapaStockADescontar[prodId];
+        const idsProductos = Object.keys(mapaStockADescontar);
+        const lecturasProductos = [];
+
+        // PASO 1: EJECUTAR TODAS LAS LECTURAS (READS) PRIMERO
+        for (const prodId of idsProductos) {
           const prodRef = doc(db, 'productos', prodId);
           const prodDoc = await transaction.get(prodRef);
-          if (!prodDoc.exists()) throw new Error(`Uno de los productos seleccionados ya no existe.`);
+          
+          if (!prodDoc.exists()) {
+            throw new Error(`El producto seleccionado (ID: ${prodId}) ya no existe.`);
+          }
+          
           const stockActual = Number(prodDoc.data().stock ?? 0);
-          if (stockActual < cantidadPedida) throw new Error(`Stock insuficiente.`);
-          transaction.update(prodRef, { stock: stockActual - cantidadPedida });
+          const cantidadPedida = mapaStockADescontar[prodId];
+
+          if (stockActual < cantidadPedida) {
+            throw new Error(`Stock insuficiente para "${prodDoc.data().nombre || prodDoc.data().titulo}". Stock actual: ${stockActual}, solicitado: ${cantidadPedida}`);
+          }
+
+          lecturasProductos.push({
+            ref: prodRef,
+            nuevoStock: stockActual - cantidadPedida
+          });
+        }
+
+        // PASO 2: EJECUTAR TODAS LAS ESCRITURAS (WRITES) AL FINAL
+        for (const item of lecturasProductos) {
+          transaction.update(item.ref, { stock: item.nuevoStock });
         }
 
         const nuevoPedidoRef = doc(collection(db, 'pedidos'));
@@ -357,7 +378,7 @@ export default function HistorialPedidos() {
       cargarPedidos();
       cargarInventario();
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error al crear pedido:", error);
       alert("Error: " + error.message);
     } finally {
       setGuardandoPedido(false);
