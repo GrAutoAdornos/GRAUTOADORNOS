@@ -409,7 +409,7 @@ export default function HistorialPedidos() {
           GR Pedidos & Facturas
         </h1>
         <div style={{ display: 'flex', gap: '10px' }}>
-            <button
+           <button
   onClick={() => window.location.href = '/admin/comisiones-vendedores'}
   style={{
     backgroundColor: '#000000',
