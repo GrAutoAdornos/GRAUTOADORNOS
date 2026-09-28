@@ -74,13 +74,25 @@ export default function ComisionesVendedores() {
     return null;
   };
 
-  // FILTRADO DE PEDIDOS
+  // FILTRADO DE PEDIDOS (CON CONDICIONAL ESTRICTA DE PAGO Y ENTREGA)
   const pedidosFiltrados = pedidos.filter(pedido => {
-    // 1. Validar si tiene vendedor asignado
+    // 1. VALIDACIÓN OBLIGATORIA: Pedido Completado Y Pago Confirmado
+    const estadoOrden = String(pedido.estado || pedido.estadoPedido || '').toLowerCase().trim();
+    const estadoPagoCliente = String(pedido.estadoPago || pedido.pagoEstado || '').toLowerCase().trim();
+
+    const estaCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
+    const estaPagado = estadoPagoCliente === 'pagado' || estadoPagoCliente === 'completado' || estadoPagoCliente === 'confirmado';
+
+    // Si la orden o el pago están pendientes, SE IGNORA POR COMPLETO (No sube comisión)
+    if (!estaCompletado || !estaPagado) {
+      return false;
+    }
+
+    // 2. Validar si tiene vendedor asignado
     const nombreVendedor = obtenerNombreVendedor(pedido);
     if (!nombreVendedor && !pedido.vendedorId) return false;
 
-    // 2. Filtro Selector por Vendedor (Acepta 'todos')
+    // 3. Filtro Selector por Vendedor (Acepta 'todos')
     if (vendedorSeleccionado !== 'todos') {
       const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
       const nombreTarget = vObj ? vObj.nombre : '';
@@ -92,14 +104,14 @@ export default function ComisionesVendedores() {
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // 3. Filtro Estado de Comisión
+    // 4. Filtro Estado de Liquidación de la Comisión
     const estadoComision = pedido.estadoComision || 'Pendiente';
     if (estadoComisionFiltro !== 'todos') {
       if (estadoComisionFiltro === 'Pendiente' && estadoComision === 'Completado') return false;
       if (estadoComisionFiltro === 'Completado' && estadoComision !== 'Completado') return false;
     }
 
-    // 4. Filtro por Fechas
+    // 5. Filtro por Fechas
     const fRaw = pedido.fecha || pedido.createdAt || pedido.fechaCreacion;
     if (fRaw) {
       const fechaOrden = fRaw.seconds ? new Date(fRaw.seconds * 1000) : new Date(fRaw);
@@ -197,7 +209,7 @@ export default function ComisionesVendedores() {
         })
       );
 
-      alert("✅ Liquidación completada exitosamente.");
+      alert("Liquidación completada exitosamente.");
     } catch (error) {
       console.error("Error al liquidar comisiones:", error);
       alert("Hubo un error al procesar la liquidación.");
@@ -234,7 +246,7 @@ export default function ComisionesVendedores() {
       {/* CABECERA */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '20px' }}>💰 Liquidación Quincenal / Mensual de Vendedores</h2>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Liquidación Quincenal / Mensual de Vendedores</h2>
           <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#888' }}>
             Filtra por período y liquida todas las ventas completadas del vendedor.
           </p>
@@ -243,7 +255,7 @@ export default function ComisionesVendedores() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link href="/admin/vendedores">
             <button style={{ backgroundColor: '#0070f3', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              ⚙️ Gestionar Vendedores
+              Gestionar Vendedores
             </button>
           </Link>
           <Link href="/admin/dashboard">
@@ -263,7 +275,7 @@ export default function ComisionesVendedores() {
             onChange={(e) => setVendedorSeleccionado(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', minWidth: '180px' }}
           >
-            <option value="todos">👥 Todos los vendedores</option>
+            <option value="todos">Todos los vendedores</option>
             {vendedores.map(v => (
               <option key={v.id} value={v.id}>{v.nombre}</option>
             ))}
@@ -278,8 +290,8 @@ export default function ComisionesVendedores() {
             style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444' }}
           >
             <option value="todos">Todas las ventas</option>
-            <option value="Pendiente">⏳ Pendientes de Pago</option>
-            <option value="Completado">✅ Liquidadas</option>
+            <option value="Pendiente">Pendientes de Pago</option>
+            <option value="Completado">Liquidadas</option>
           </select>
         </div>
 
@@ -323,7 +335,7 @@ export default function ComisionesVendedores() {
             disabled={pedidosFiltrados.length === 0}
             style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#2e7d32' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            💵 Liquidar Todo lo Filtrado
+            Liquidar Todo lo Filtrado
           </button>
 
           <button
@@ -331,7 +343,7 @@ export default function ComisionesVendedores() {
             disabled={pedidosFiltrados.length === 0}
             style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#0070f3' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            📄 Generar Recibo de Pago Global
+            Generar Recibo de Pago Global
           </button>
         </div>
       </div>
@@ -393,7 +405,7 @@ export default function ComisionesVendedores() {
                         cursor: 'pointer'
                       }}
                     >
-                      {estadoComision === 'Completado' ? '✅ Liquidado' : '⏳ Pendiente'}
+                      {estadoComision === 'Completado' ? 'Liquidado' : 'Pendiente'}
                     </button>
                   </td>
 
@@ -421,7 +433,7 @@ export default function ComisionesVendedores() {
             {pedidosFiltrados.length === 0 && (
               <tr>
                 <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                  No hay ventas registradas para el filtro seleccionado.
+                  No hay ventas cobradas y completadas registradas para el filtro seleccionado.
                 </td>
               </tr>
             )}
@@ -523,7 +535,7 @@ export default function ComisionesVendedores() {
                 onClick={() => window.print()}
                 style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
               >
-                🖨️ Imprimir / Guardar PDF
+                Imprimir / Guardar PDF
               </button>
             </div>
 
