@@ -5,10 +5,11 @@ import Link from 'next/link';
 
 export default function ComisionesVendedores() {
   const [vendedores, setVendedores] = useState([]);
-  const [ordenes, setOrdenes] = useState([]);
+  const [pedidos, setPedidos] = useState([]);
   const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     cargarDatos();
@@ -16,68 +17,83 @@ export default function ComisionesVendedores() {
 
   const cargarDatos = async () => {
     try {
+      setLoading(true);
+
       // 1. Cargar Vendedores
       const snapVendedores = await getDocs(collection(db, 'vendedores'));
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
 
-      // 2. Cargar Órdenes
-      const snapOrdenes = await getDocs(collection(db, 'ordenes'));
-      const listaOrdenes = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
-      setOrdenes(listaOrdenes);
+      // 2. Cargar Pedidos (colección 'pedidos')
+      const snapPedidos = await getDocs(collection(db, 'pedidos'));
+      let listaPedidos = snapPedidos.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Respaldo por si hay datos viejos en 'ordenes'
+      if (listaPedidos.length === 0) {
+        const snapOrdenes = await getDocs(collection(db, 'ordenes'));
+        listaPedidos = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+
+      setPedidos(listaPedidos);
     } catch (error) {
       console.error("Error al cargar datos:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Extrae el nombre del vendedor de cualquier estructura posible de orden
-  const obtenerNombreVendedor = (orden) => {
-    if (orden.vendedorNombre) return orden.vendedorNombre;
-    if (typeof orden.vendedor === 'string') return orden.vendedor;
-    if (typeof orden.vendedor === 'object' && orden.vendedor?.nombre) return orden.vendedor.nombre;
-    if (orden.vendedorId) {
-      const v = vendedores.find(vDoc => vDoc.id === orden.vendedorId);
+  // Helper para obtener el subtotal/monto base de productos
+  const obtenerMontoBase = (pedido) => {
+    if (pedido.subtotalProductos !== undefined && Number(pedido.subtotalProductos) > 0) {
+      return Number(pedido.subtotalProductos);
+    }
+    if (Array.isArray(pedido.items) && pedido.items.length > 0) {
+      return pedido.items.reduce((sum, item) => {
+        const p = Number(item.precio || item.price || 0);
+        const q = Number(item.cantidad || item.cantidadSeleccionada || item.quantity || 1);
+        return sum + (p * q);
+      }, 0);
+    }
+    // Si no hay subtotal, restar envío si existe
+    const total = Number(pedido.total) || 0;
+    const envio = Number(pedido.costoEnvio) || 0;
+    return Math.max(0, total - envio);
+  };
+
+  // Helper para identificar el nombre del vendedor
+  const obtenerNombreVendedor = (pedido) => {
+    if (pedido.vendedorNombre && pedido.vendedorNombre !== 'Sin Asignar') {
+      return pedido.vendedorNombre;
+    }
+    if (typeof pedido.vendedor === 'string') return pedido.vendedor;
+    if (pedido.vendedorId) {
+      const v = vendedores.find(vDoc => vDoc.id === pedido.vendedorId);
       if (v) return v.nombre;
     }
     return null;
   };
 
-  // Mapea la base imponible del pedido (solo productos)
-  const obtenerMontoBase = (orden) => {
-    if (orden.subtotalProductos !== undefined && Number(orden.subtotalProductos) > 0) {
-      return Number(orden.subtotalProductos);
-    }
-    if (Array.isArray(orden.items) && orden.items.length > 0) {
-      return orden.items.reduce((sum, item) => {
-        const p = Number(item.precio || item.price || 0);
-        const q = Number(item.cantidad || item.quantity || 1);
-        return sum + (p * q);
-      }, 0);
-    }
-    return Number(orden.total) || 0;
-  };
+  // Filtrado de pedidos
+  const pedidosFiltrados = pedidos.filter(pedido => {
+    const nombreVendedor = obtenerNombreVendedor(pedido);
 
-  // Filtrado flexible
-  const ordenesFiltradas = ordenes.filter(orden => {
-    const nombreVendedor = obtenerNombreVendedor(orden);
+    // Omitir si no tiene vendedor asignado
+    if (!nombreVendedor && !pedido.vendedorId) return false;
 
-    // Si la orden no tiene ninguna referencia a vendedor, omitir
-    if (!nombreVendedor && !orden.vendedorId && !orden.vendedor) return false;
-
-    // Filtro por Vendedor seleccionado
+    // Filtro selector por vendedor
     if (vendedorSeleccionado !== 'todos') {
       const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
       const nombreTarget = vObj ? vObj.nombre : '';
 
-      const coincideId = orden.vendedorId === vendedorSeleccionado;
+      const coincideId = pedido.vendedorId === vendedorSeleccionado;
       const coincideNombre = nombreVendedor && nombreTarget && 
         nombreVendedor.trim().toLowerCase() === nombreTarget.trim().toLowerCase();
 
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // Filtro opcional por Fecha
-    const fRaw = orden.fecha || orden.createdAt || orden.fechaCreacion;
+    // Filtro por Fecha
+    const fRaw = pedido.fecha || pedido.createdAt || pedido.fechaCreacion;
     if (fRaw) {
       const fechaOrden = fRaw.seconds ? new Date(fRaw.seconds * 1000) : new Date(fRaw);
       if (!isNaN(fechaOrden.getTime())) {
@@ -97,18 +113,17 @@ export default function ComisionesVendedores() {
     return true;
   });
 
-  // Totales
-  const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerMontoBase(o), 0);
+  // Totales generales acumulados
+  const totalVendido = pedidosFiltrados.reduce((sum, p) => sum + obtenerMontoBase(p), 0);
 
-  const totalComisiones = ordenesFiltradas.reduce((sum, o) => {
-    if (o.montoComisionVendedor !== undefined && Number(o.montoComisionVendedor) > 0) {
-      return sum + Number(o.montoComisionVendedor);
+  const totalComisiones = pedidosFiltrados.reduce((sum, p) => {
+    if (p.montoComisionVendedor !== undefined && Number(p.montoComisionVendedor) > 0) {
+      return sum + Number(p.montoComisionVendedor);
     }
-    const base = obtenerMontoBase(o);
-    // Buscar si hay un vendedor asociado para saber su % por defecto
-    const nombreV = obtenerNombreVendedor(o);
+    const base = obtenerMontoBase(p);
+    const nombreV = obtenerNombreVendedor(p);
     const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
-    const pct = Number(o.vendedorPorcentaje || o.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
+    const pct = Number(p.vendedorPorcentaje || p.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
     
     return sum + (base * (pct / 100));
   }, 0);
@@ -184,50 +199,55 @@ export default function ComisionesVendedores() {
       </div>
 
       {/* TABLA DE DETALLES */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#222', color: '#FFF' }}>
-            <th style={{ padding: '10px' }}>Orden #</th>
-            <th style={{ padding: '10px' }}>Vendedor</th>
-            <th style={{ padding: '10px' }}>Cliente</th>
-            <th style={{ padding: '10px' }}>Base Productos</th>
-            <th style={{ padding: '10px' }}>% Com.</th>
-            <th style={{ padding: '10px' }}>Comisión</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordenesFiltradas.map(orden => {
-            const baseMonto = obtenerMontoBase(orden);
-            const nombreV = obtenerNombreVendedor(orden) || 'N/A';
-            const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
-            const pct = Number(orden.vendedorPorcentaje || orden.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
-            
-            const comision = (orden.montoComisionVendedor !== undefined && Number(orden.montoComisionVendedor) > 0)
-              ? Number(orden.montoComisionVendedor) 
-              : (baseMonto * (pct / 100));
-
-            const nombreC = orden.clienteNombre || orden.nombreCliente || orden.cliente || 'Cliente General';
-
-            return (
-              <tr key={orden.id} style={{ borderBottom: '1px solid #333' }}>
-                <td style={{ padding: '10px' }}>#{orden.id.slice(-6)}</td>
-                <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreV}</td>
-                <td style={{ padding: '10px', color: '#AAA' }}>{nombreC}</td>
-                <td style={{ padding: '10px' }}>RD$ {baseMonto.toLocaleString()}</td>
-                <td style={{ padding: '10px' }}>{pct}%</td>
-                <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
-              </tr>
-            );
-          })}
-          {ordenesFiltradas.length === 0 && (
-            <tr>
-              <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                No hay ventas registradas con vendedor para el filtro seleccionado.
-              </td>
+      {loading ? (
+        <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Cargando información...</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#222', color: '#FFF' }}>
+              <th style={{ padding: '10px' }}>Orden #</th>
+              <th style={{ padding: '10px' }}>Vendedor</th>
+              <th style={{ padding: '10px' }}>Cliente</th>
+              <th style={{ padding: '10px' }}>Base Productos</th>
+              <th style={{ padding: '10px' }}>% Com.</th>
+              <th style={{ padding: '10px' }}>Comisión</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pedidosFiltrados.map(pedido => {
+              const baseMonto = obtenerMontoBase(pedido);
+              const nombreV = obtenerNombreVendedor(pedido) || 'N/A';
+              const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
+              const pct = Number(pedido.vendedorPorcentaje || pedido.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
+              
+              const comision = (pedido.montoComisionVendedor !== undefined && Number(pedido.montoComisionVendedor) > 0)
+                ? Number(pedido.montoComisionVendedor) 
+                : (baseMonto * (pct / 100));
+
+              const nombreC = pedido.clienteNombre || pedido.cliente || 'Cliente General';
+              const numOrden = pedido.orderId || pedido.id.slice(-6);
+
+              return (
+                <tr key={pedido.id} style={{ borderBottom: '1px solid #333' }}>
+                  <td style={{ padding: '10px' }}>#{numOrden}</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreV}</td>
+                  <td style={{ padding: '10px', color: '#AAA' }}>{nombreC}</td>
+                  <td style={{ padding: '10px' }}>RD$ {baseMonto.toLocaleString()}</td>
+                  <td style={{ padding: '10px' }}>{pct}%</td>
+                  <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
+                </tr>
+              );
+            })}
+            {pedidosFiltrados.length === 0 && (
+              <tr>
+                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                  No hay ventas registradas con vendedor para el filtro seleccionado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
