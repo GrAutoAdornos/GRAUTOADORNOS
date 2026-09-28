@@ -212,6 +212,7 @@ export default function HistorialPedidos() {
 
   const subtotalProductos = itemsSeleccionados.reduce((acc, item) => acc + (Number(item.precio || item.price || 0) * item.cantidadSeleccionada), 0);
   const costoEnvio = zonaSeleccionada.costo;
+  const costoInstalacion = Number(data.subtotalInstalaciones) || 0;
   const totalGeneral = subtotalProductos + costoEnvio;
 
   const handleCrearPedidoManual = async (e) => {
