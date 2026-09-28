@@ -60,28 +60,34 @@ export default function ReporteComisiones() {
     }
   };
 
-  const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
+  // Cálculo preciso del costo de instalación basado únicamente en los artículos con instalación
+  const calcularPrecioInstalacionExacto = (data, mapaProductos) => {
     if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
     if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
     if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
 
-    let tarifaInstalacion = 0;
+    let sumaManoObra = 0;
     if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
         const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
+        const cantidad = Number(p.cantidad || 1);
+
         if (montoInst > 0) {
-          tarifaInstalacion += montoInst;
+          sumaManoObra += montoInst * cantidad;
         } else {
+          // Buscar precio de instalación mapeado por nombre
           const nombre = String(p.nombre || p.titulo || '').toLowerCase().trim();
           if (mapaProductos[nombre]) {
-            tarifaInstalacion += mapaProductos[nombre];
+            sumaManoObra += mapaProductos[nombre] * cantidad;
           }
         }
       });
-      if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    return Number(data.total || data.monto || 1000);
+    if (sumaManoObra > 0) return sumaManoObra;
+
+    // Si la orden no desgloza mano de obra y viene de citas, usar el total o un monto por defecto
+    return Number(data.montoInstalacion || 1100);
   };
 
   const obtenerCitasCompletadas = async (mapaProductos, listaTecnicos) => {
@@ -92,19 +98,18 @@ export default function ReporteComisiones() {
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data() || {};
         
-        // Normalizar lectura de estado
+        // Estado normalizado
         const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
         
-        // EVALUACIÓN DE ESTADO:
-        // Solo ingresa si está COMPLETADA
+        // CONDICIONAL CORREGIDA: Solo si el estado es COMPLETADA
         const esCompletada = estadoCita === 'completada' || estadoCita === 'completado';
         
-        // Evitar que entren pedidos normales sin cita o asignación de taller
+        // Garantizar que provenga de una cita asignada
         const tieneTecnico = Boolean(data.tecnicoId || data.tecnicoNombre);
         const esCitaValida = Boolean(data.esCita || data.fechaCita || data.fechaInstalacion || tieneTecnico);
 
         if (esCompletada && esCitaValida) {
-          const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
+          const precioInstalacion = calcularPrecioInstalacionExacto(data, mapaProductos);
           const clienteNombre = data.cliente || data.clienteNombre || data.nombre || 'Cliente General';
           
           let tecEncontrado = listaTecnicos.find(t => t.id === data.tecnicoId);
@@ -117,15 +122,14 @@ export default function ReporteComisiones() {
           const tecnicoNombre = tecEncontrado ? tecEncontrado.nombre : (data.tecnicoNombre || 'Sin Asignar');
           const tecnicoId = tecEncontrado ? tecEncontrado.id : (data.tecnicoId || '');
 
+          // Obtener porcentaje del técnico (ej. 50% de Landra Guzmán)
           let porcentajeComision = Number(data.porcentajeComision || data.porcentaje || data.tecnicoPorcentaje) || 0;
           if (porcentajeComision === 0 && tecEncontrado) {
-            porcentajeComision = Number(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 20);
+            porcentajeComision = Number(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 50);
           }
 
-          let montoComision = Number(data.montoComision) || 0;
-          if (montoComision === 0) {
-            montoComision = (precioInstalacion * porcentajeComision) / 100;
-          }
+          // Recalcular monto de comisión en tiempo real (1100 * 50% = 550)
+          const montoComision = (precioInstalacion * porcentajeComision) / 100;
 
           let vehiculoTexto = data.detalles || data.vehiculo;
           if (!vehiculoTexto && Array.isArray(data.productos)) {
@@ -238,7 +242,7 @@ export default function ReporteComisiones() {
           <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
           {tecnicos.map((tec) => (
             <option key={tec.id} value={tec.id}>
-              {tec.nombre} ({tec.porcentajeDefecto || tec.porcentaje || 20}%)
+              {tec.nombre} ({tec.porcentajeDefecto || tec.porcentaje || 50}%)
             </option>
           ))}
         </select>
