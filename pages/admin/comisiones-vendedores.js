@@ -16,12 +16,10 @@ export default function ComisionesVendedores() {
 
   const cargarDatos = async () => {
     try {
-      // Cargar vendedores
       const snapVendedores = await getDocs(collection(db, 'vendedores'));
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
 
-      // Cargar órdenes/ventas
       const snapOrdenes = await getDocs(collection(db, 'ordenes'));
       const listaOrdenes = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
       setOrdenes(listaOrdenes);
@@ -30,9 +28,21 @@ export default function ComisionesVendedores() {
     }
   };
 
-  // Filtrar órdenes por vendedor y rango de fechas
+  // Helper para obtener la base imponible de comisión (subtotal solo productos)
+  const obtenerSubtotalProductos = (orden) => {
+    if (orden.subtotalProductos !== undefined) return Number(orden.subtotalProductos);
+    if (Array.isArray(orden.items) && orden.items.length > 0) {
+      return orden.items.reduce((sum, item) => sum + (Number(item.precio || item.price || 0) * (item.cantidad || item.quantity || 1)), 0);
+    }
+    return Number(orden.total) || 0;
+  };
+
+  // Filtrar órdenes
   const ordenesFiltradas = ordenes.filter(orden => {
-    // Filtro por vendedor
+    // Solo considerar órdenes que tengan vendedor asignado
+    if (!orden.vendedorId) return false;
+
+    // Filtro por vendedor específico
     if (vendedorSeleccionado !== 'todos' && orden.vendedorId !== vendedorSeleccionado) {
       return false;
     }
@@ -52,12 +62,16 @@ export default function ComisionesVendedores() {
     return true;
   });
 
-  // Calcular totales
-  const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  // Calcular totales acumulados
+  const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerSubtotalProductos(o), 0);
+  
   const totalComisiones = ordenesFiltradas.reduce((sum, o) => {
-    const total = Number(o.total) || 0;
-    const porcentaje = Number(o.porcentajeComisionVendedor) || Number(o.vendedorPorcentaje) || 5;
-    return sum + (total * (porcentaje / 100));
+    if (o.montoComisionVendedor !== undefined) {
+      return sum + Number(o.montoComisionVendedor);
+    }
+    const subtotal = obtenerSubtotalProductos(o);
+    const porcentaje = Number(o.vendedorPorcentaje) || Number(o.porcentajeComisionVendedor) || 5;
+    return sum + (subtotal * (porcentaje / 100));
   }, 0);
 
   return (
@@ -121,7 +135,7 @@ export default function ComisionesVendedores() {
       {/* TARJETAS RESUMEN */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #0070f3' }}>
-          <span style={{ color: '#AAA', fontSize: '13px' }}>Ventas Totales</span>
+          <span style={{ color: '#AAA', fontSize: '13px' }}>Base Productos Vendidos</span>
           <h3 style={{ margin: '5px 0 0 0', fontSize: '22px' }}>RD$ {totalVendido.toLocaleString()}</h3>
         </div>
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #2e7d32' }}>
@@ -137,23 +151,25 @@ export default function ComisionesVendedores() {
             <th style={{ padding: '10px' }}>Orden #</th>
             <th style={{ padding: '10px' }}>Vendedor</th>
             <th style={{ padding: '10px' }}>Cliente</th>
-            <th style={{ padding: '10px' }}>Monto Venta</th>
+            <th style={{ padding: '10px' }}>Base Productos</th>
             <th style={{ padding: '10px' }}>% Com.</th>
             <th style={{ padding: '10px' }}>Comisión</th>
           </tr>
         </thead>
         <tbody>
           {ordenesFiltradas.map(orden => {
-            const monto = Number(orden.total) || 0;
-            const pct = Number(orden.porcentajeComisionVendedor) || Number(orden.vendedorPorcentaje) || 5;
-            const comision = monto * (pct / 100);
+            const subtotalProd = obtenerSubtotalProductos(orden);
+            const pct = Number(orden.vendedorPorcentaje) || Number(orden.porcentajeComisionVendedor) || 5;
+            const comision = orden.montoComisionVendedor !== undefined 
+              ? Number(orden.montoComisionVendedor) 
+              : (subtotalProd * (pct / 100));
 
             return (
               <tr key={orden.id} style={{ borderBottom: '1px solid #333' }}>
                 <td style={{ padding: '10px' }}>#{orden.id.slice(-6)}</td>
                 <td style={{ padding: '10px', fontWeight: 'bold' }}>{orden.vendedorNombre || 'N/A'}</td>
-                <td style={{ padding: '10px', color: '#AAA' }}>{orden.clienteNombre || 'Cliente General'}</td>
-                <td style={{ padding: '10px' }}>RD$ {monto.toLocaleString()}</td>
+                <td style={{ padding: '10px', color: '#AAA' }}>{orden.clienteNombre || orden.nombreCliente || 'Cliente General'}</td>
+                <td style={{ padding: '10px' }}>RD$ {subtotalProd.toLocaleString()}</td>
                 <td style={{ padding: '10px' }}>{pct}%</td>
                 <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
               </tr>
@@ -162,7 +178,7 @@ export default function ComisionesVendedores() {
           {ordenesFiltradas.length === 0 && (
             <tr>
               <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                No hay ventas registradas para el filtro seleccionado.
+                No hay ventas registradas con vendedor para el filtro seleccionado.
               </td>
             </tr>
           )}
