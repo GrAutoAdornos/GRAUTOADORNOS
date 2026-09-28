@@ -1,6 +1,6 @@
 // pages/admin/pedidos.js
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc, runTransaction, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 export default function HistorialPedidos() {
@@ -40,14 +40,12 @@ export default function HistorialPedidos() {
   // Método de Pago
   const [metodoPago, setMetodoPago] = useState('Pago Contra Entrega');
 
-  // Instalación y Citas
-  const [requiereInstalacion, setRequiereInstalacion] = useState(false);
-  const [fechaCita, setFechaCita] = useState('');
-  const [horaCita, setHoraCita] = useState('');
-
   // Ítems seleccionados
   const [itemsSeleccionados, setItemsSeleccionados] = useState([]);
   const [guardandoPedido, setGuardandoPedido] = useState(false);
+
+  // Estado para la Factura Imprimible
+  const [facturaParaImprimir, setFacturaParaImprimir] = useState(null);
 
   useEffect(() => {
     cargarPedidos();
@@ -188,7 +186,14 @@ export default function HistorialPedidos() {
             : item
         );
       } else {
-        return [...prev, { ...producto, cantidadSeleccionada: 1 }];
+        return [...prev, { 
+          ...producto, 
+          cantidadSeleccionada: 1,
+          requiereInstalacion: false,
+          costoInstalacion: Number(producto.precioInstalacion || 0),
+          fechaCita: '',
+          horaCita: ''
+        }];
       }
     });
   };
@@ -210,9 +215,25 @@ export default function HistorialPedidos() {
     );
   };
 
+  const actualizarItemInstalacion = (id, campo, valor) => {
+    setItemsSeleccionados((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          return { ...item, [campo]: valor };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Cálculos dinámicos
   const subtotalProductos = itemsSeleccionados.reduce((acc, item) => acc + (Number(item.precio || item.price || 0) * item.cantidadSeleccionada), 0);
-  const costoEnvio = zonaSeleccionada.costo;
-  const totalGeneral = subtotalProductos + costoEnvio;
+  const totalInstalaciones = itemsSeleccionados.reduce((acc, item) => acc + (item.requiereInstalacion ? Number(item.costoInstalacion || 0) : 0), 0);
+  
+  // Si al menos un ítem requiere instalación, el envío es GRATIS (RD$ 0)
+  const hayInstalacion = itemsSeleccionados.some(item => item.requiereInstalacion);
+  const costoEnvioCalculado = hayInstalacion ? 0 : zonaSeleccionada.costo;
+  const totalGeneral = subtotalProductos + totalInstalaciones + costoEnvioCalculado;
 
   const handleCrearPedidoManual = async (e) => {
     e.preventDefault();
@@ -221,26 +242,92 @@ export default function HistorialPedidos() {
       return;
     }
 
-    if (requiereInstalacion) {
-      if (!fechaCita || !horaCita) {
-        alert("Por favor selecciona la fecha y hora para la cita de instalación.");
+    // Validar ítems con instalación
+    const itemsConInstalacion = itemsSeleccionados.filter(item => item.requiereInstalacion);
+    for (const item of itemsConInstalacion) {
+      if (!item.fechaCita || !item.horaCita) {
+        alert(`Por favor selecciona la fecha y hora de instalación para: ${item.nombre || item.titulo}`);
         return;
       }
-      if (!esSabado(fechaCita)) {
-        alert("Las citas de instalación solo pueden agendarse los días SÁBADO.");
+      if (!esSabado(item.fechaCita)) {
+        alert(`La fecha de instalación para "${item.nombre || item.titulo}" debe ser un SÁBADO.`);
         return;
       }
     }
 
     setGuardandoPedido(true);
     try {
+      // Validar límite de 2 instalaciones por sábado
+      if (itemsConInstalacion.length > 0) {
+        // Agrupar fechas seleccionadas en este pedido
+        const mapaFechasNuevas = {};
+        itemsConInstalacion.forEach(i => {
+          mapaFechasNuevas[i.fechaCita] = (mapaFechasNuevas[i.fechaCita] || 0) + 1;
+        });
+
+        // Verificar con la base de datos
+        for (const fecha of Object.keys(mapaFechasNuevas)) {
+          let totalExistentes = 0;
+          pedidos.forEach(p => {
+            if (p.itemsDetalle) {
+              p.itemsDetalle.forEach(it => {
+                if (it.requiereInstalacion && it.fechaCita === fecha) {
+                  totalExistentes += 1;
+                }
+              });
+            } else if (p.requiereInstalacion && p.fechaCita === fecha) {
+              totalExistentes += 1;
+            }
+          });
+
+          if (totalExistentes + mapaFechasNuevas[fecha] > 2) {
+            alert(`Capacidad máxima alcanzada para el sábado ${fecha}. Ya hay ${totalExistentes} instalaciones agendadas y solo se permiten 2 por sábado.`);
+            setGuardandoPedido(false);
+            return;
+          }
+        }
+      }
+
       const orderId = Math.floor(100000 + Math.random() * 900000).toString();
-      const detallesTexto = itemsSeleccionados.map(i => `${i.cantidadSeleccionada}x ${i.nombre || i.titulo}`).join(', ');
+      const detallesTexto = itemsSeleccionados.map(i => {
+        let txt = `${i.cantidadSeleccionada}x ${i.nombre || i.titulo}`;
+        if (i.requiereInstalacion) txt += ` (Con Instalación: ${i.fechaCita} @ ${i.horaCita})`;
+        return txt;
+      }).join(', ');
 
       // Obtener datos del vendedor asignado
       const vendedorObj = listaVendedores.find(v => v.id === vendedorSeleccionado);
       const porcentajeComision = vendedorObj ? Number(vendedorObj.porcentajeDefecto || 5) : 0;
       const montoComision = (subtotalProductos * porcentajeComision) / 100;
+
+      const datosPedido = {
+        orderId: orderId,
+        clienteNombre: nombreCliente,
+        cliente: nombreCliente,
+        telefono: telefonoCliente,
+        correo: correoCliente || 'No especificado',
+        direccion: direccionCliente || zonaSeleccionada.nombre,
+        zonaEnvio: zonaSeleccionada.nombre,
+        costoEnvio: costoEnvioCalculado,
+        subtotalProductos: subtotalProductos,
+        totalInstalaciones: totalInstalaciones,
+        detalles: detallesTexto,
+        itemsDetalle: itemsSeleccionados,
+        total: totalGeneral,
+        metodoPago: metodoPago,
+        estado: 'Pendiente',
+        fidelizacionContactado: false,
+        fecha: new Date(),
+        origen: 'Manual (WhatsApp/Llamada)',
+        requiereInstalacion: hayInstalacion,
+        
+        // Comisión Vendedor
+        vendedorId: vendedorObj ? vendedorObj.id : null,
+        vendedorNombre: vendedorObj ? vendedorObj.nombre : 'Sin Asignar',
+        vendedorPorcentaje: porcentajeComision,
+        porcentajeComisionVendedor: porcentajeComision,
+        montoComisionVendedor: montoComision
+      };
 
       await runTransaction(db, async (transaction) => {
         for (const item of itemsSeleccionados) {
@@ -248,51 +335,18 @@ export default function HistorialPedidos() {
           const prodDoc = await transaction.get(prodRef);
           if (!prodDoc.exists()) throw new Error(`El producto ya no existe.`);
           const stockActual = Number(prodDoc.data().stock ?? 0);
-          if (stockActual < item.cantidadSeleccionada) throw new Error(`Stock insuficiente.`);
+          if (stockActual < item.cantidadSeleccionada) throw new Error(`Stock insuficiente para ${item.nombre || item.titulo}.`);
           transaction.update(prodRef, { stock: stockActual - item.cantidadSeleccionada });
         }
 
         const nuevoPedidoRef = doc(collection(db, 'pedidos'));
-        const datosPedido = {
-          orderId: orderId,
-          clienteNombre: nombreCliente,
-          cliente: nombreCliente,
-          telefono: telefonoCliente,
-          correo: correoCliente || 'No especificado',
-          direccion: direccionCliente || zonaSeleccionada.nombre,
-          zonaEnvio: zonaSeleccionada.nombre,
-          costoEnvio: costoEnvio,
-          subtotalProductos: subtotalProductos,
-          detalles: detallesTexto,
-          total: totalGeneral,
-          metodoPago: metodoPago,
-          estado: 'Pendiente',
-          fidelizacionContactado: false,
-          fecha: new Date(),
-          origen: 'Manual (WhatsApp/Llamada)',
-          requiereInstalacion: requiereInstalacion,
-          
-          // Comisión asignada al Vendedor (calculada solo del subtotal de productos)
-          vendedorId: vendedorObj ? vendedorObj.id : null,
-          vendedorNombre: vendedorObj ? vendedorObj.nombre : 'Sin Asignar',
-          vendedorPorcentaje: porcentajeComision,
-          porcentajeComisionVendedor: porcentajeComision,
-          montoComisionVendedor: montoComision
-        };
-
-        if (requiereInstalacion) {
-          datosPedido.fechaCita = fechaCita;
-          datosPedido.horaCita = horaCita;
-          datosPedido.fechaInstalacion = fechaCita;
-          datosPedido.horaInstalacion = horaCita;
-          datosPedido.estadoCita = 'Pendiente';
-        }
-
         transaction.set(nuevoPedidoRef, datosPedido);
       });
 
-      alert(`¡Pedido #${orderId} creado con éxito para ${nombreCliente}!`);
       setMostrarModal(false);
+      setFacturaParaImprimir(datosPedido);
+
+      // Limpiar formulario
       setTipoCliente('nuevo');
       setClienteExistenteSeleccionado('');
       setNombreCliente('');
@@ -300,10 +354,8 @@ export default function HistorialPedidos() {
       setCorreoCliente('');
       setDireccionCliente('');
       setItemsSeleccionados([]);
-      setRequiereInstalacion(false);
-      setFechaCita('');
-      setHoraCita('');
       setVendedorSeleccionado('');
+      
       cargarPedidos();
       cargarInventario();
     } catch (error) {
@@ -319,13 +371,38 @@ export default function HistorialPedidos() {
     return p.estado === filtroEstado;
   });
 
-  //  CÁLCULO DE CONTADORES
+  // CÁLCULO DE CONTADORES
   const totalPendientes = pedidos.filter((p) => p.estado === 'Pendiente').length;
   const totalCompletados = pedidos.filter((p) => p.estado === 'Completado' || p.estado === 'Completada').length;
   const totalCancelados = pedidos.filter((p) => p.estado === 'Cancelado' || p.estado === 'Cancelada').length;
 
   return (
     <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '30px 20px', fontFamily: 'sans-serif' }}>
+      
+      {/* CSS PARA IMPRESIÓN DE FACTURA */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #seccion-impresion-factura, #seccion-impresion-factura * {
+            visibility: visible;
+          }
+          #seccion-impresion-factura {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: #FFF !important;
+            color: #000 !important;
+            padding: 20px;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '25px', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#E50914', textTransform: 'uppercase', margin: 0 }}>
@@ -352,7 +429,7 @@ export default function HistorialPedidos() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         
-        {/* BLOQUE DE TARJETAS CON CONTADORES DE ESTADO */}
+        {/* CONTADORES */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '25px' }}>
           <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
             <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Pendientes</span>
@@ -403,12 +480,7 @@ export default function HistorialPedidos() {
                     </span>
                     {pedido.vendedorNombre && pedido.vendedorNombre !== 'Sin Asignar' && (
                       <span style={{ backgroundColor: '#1B2A4A', color: '#60A5FA', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #2563EB' }}>
-                        👤 Vendedor: {pedido.vendedorNombre}
-                      </span>
-                    )}
-                    {(pedido.fechaCita || pedido.fechaInstalacion) && (
-                      <span style={{ backgroundColor: '#382D1C', color: '#FFB800', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #FFB800', fontWeight: 'bold' }}>
-                         Cita: {pedido.fechaCita || pedido.fechaInstalacion} ({pedido.horaCita || pedido.horaInstalacion})
+                         Vendedor: {pedido.vendedorNombre}
                       </span>
                     )}
                   </div>
@@ -425,6 +497,13 @@ export default function HistorialPedidos() {
                     </select>
 
                     <button
+                      onClick={() => setFacturaParaImprimir(pedido)}
+                      style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                       Ver Factura
+                    </button>
+
+                    <button
                       onClick={() => handleEliminarPedido(pedido.id, pedido.orderId)}
                       style={{ backgroundColor: '#330000', color: '#ff4d4d', border: '1px solid #ff4d4d', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
@@ -436,10 +515,10 @@ export default function HistorialPedidos() {
                 <div style={{ fontSize: '13px', color: '#DDD', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <p style={{ margin: 0 }}><strong>Cliente:</strong> {pedido.clienteNombre || pedido.cliente} ({pedido.telefono})</p>
                   <p style={{ margin: 0 }}><strong>Dirección / Zona:</strong> {pedido.direccion}</p>
-                  <p style={{ margin: 0 }}><strong>Productos:</strong> {pedido.detalles}</p>
+                  <p style={{ margin: 0 }}><strong>Detalles:</strong> {pedido.detalles}</p>
                   <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {pedido.metodoPago || 'Pago Contra Entrega'}</p>
                   <p style={{ margin: 0, fontSize: '14px', fontWeight: '900', color: '#25D366', marginTop: '4px' }}>
-                    Total: RD$ {pedido.total}
+                    Total: RD$ {Number(pedido.total).toLocaleString()}
                   </p>
                 </div>
 
@@ -449,11 +528,10 @@ export default function HistorialPedidos() {
                       const msg = ` *GR AUTO ADORNOS* - FACTURA DE PEDIDO\n\n` +
                                   `*Orden:* #${pedido.orderId}\n` +
                                   `*Cliente:* ${pedido.clienteNombre || pedido.cliente}\n` +
-                                  `*Productos:* ${pedido.detalles}\n` +
+                                  `*Detalles:* ${pedido.detalles}\n` +
                                   `*Envío / Zona:* ${pedido.direccion}\n` +
                                   `*Método de Pago:* ${pedido.metodoPago || 'Pago Contra Entrega'}\n` +
-                                  (pedido.fechaCita || pedido.fechaInstalacion ? `*Cita en Taller:* ${pedido.fechaCita || pedido.fechaInstalacion} a las ${pedido.horaCita || pedido.horaInstalacion}\n` : '') +
-                                  `*TOTAL A PAGAR:* RD$ ${pedido.total}\n\n` +
+                                  `*TOTAL A PAGAR:* RD$ ${Number(pedido.total).toLocaleString()}\n\n` +
                                   ` *CUENTAS BANCARIAS PARA TRANSFERENCIA:*\n` +
                                   `• Banco Popular DOP: Cta. Ahorros N° 814423729\n` +
                                   `• Banreservas DOP: Cta. Corriente N° 9605170252\n` +
@@ -465,7 +543,7 @@ export default function HistorialPedidos() {
                     }}
                     style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
-                     Enviar Factura & Cuentas (WhatsApp)
+                     Enviar Factura (WhatsApp)
                   </button>
                 </div>
               </div>
@@ -474,7 +552,7 @@ export default function HistorialPedidos() {
         )}
       </div>
 
-      {/* MODAL PARA CREAR PEDIDO MANUAL */}
+      {/* MODAL CREAR PEDIDO MANUAL */}
       {mostrarModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -483,14 +561,14 @@ export default function HistorialPedidos() {
         }}>
           <div style={{
             backgroundColor: '#141414', border: '1px solid #333', borderRadius: '12px',
-            width: '100%', maxWidth: '650px', padding: '25px', maxHeight: '90vh', overflowY: 'auto', color: '#FFF'
+            width: '100%', maxWidth: '700px', padding: '25px', maxHeight: '90vh', overflowY: 'auto', color: '#FFF'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222', paddingBottom: '12px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <img src="/LOGO NEGRO.jpeg" alt="Logo" style={{ width: '35px', height: '35px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
                 <h3 style={{ margin: 0, color: '#E50914', fontSize: '18px' }}>Registrar Pedido Manual</h3>
               </div>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
             </div>
 
             <form onSubmit={handleCrearPedidoManual} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -498,7 +576,7 @@ export default function HistorialPedidos() {
               {/* ASIGNACIÓN DE VENDEDOR */}
               <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #2563EB' }}>
                 <label style={{ fontSize: '12px', color: '#60A5FA', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
-                  💼 Asignar Vendedor (Para Comisión de Venta):
+                   Asignar Vendedor (Comisión):
                 </label>
                 <select
                   value={vendedorSeleccionado}
@@ -512,12 +590,9 @@ export default function HistorialPedidos() {
                     </option>
                   ))}
                 </select>
-                <span style={{ fontSize: '11px', color: '#AAA', marginTop: '4px', display: 'block' }}>
-                  * La comisión se calculará únicamente del monto de los productos (excluyendo envío o instalación).
-                </span>
               </div>
 
-              {/* SELECTOR DE CLIENTE NUEVO VS EXISTENTE */}
+              {/* SELECCIÓN DE CLIENTE */}
               <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
                 <label style={{ fontSize: '12px', color: '#FFB800', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>
                    Selección de Cliente:
@@ -552,7 +627,6 @@ export default function HistorialPedidos() {
                   </label>
                 </div>
 
-                {/* DESPLEGABLE DE CLIENTES EXISTENTES */}
                 {tipoCliente === 'existente' && (
                   <div>
                     <select
@@ -571,7 +645,7 @@ export default function HistorialPedidos() {
                 )}
               </div>
 
-              {/* CAMPOS DEL CLIENTE */}
+              {/* CAMPOS CLIENTE */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '5px' }}>Nombre Completo *</label>
@@ -648,55 +722,6 @@ export default function HistorialPedidos() {
                 </select>
               </div>
 
-              {/* REQUIERE INSTALACIÓN Y CITAS */}
-              <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#FFB800' }}>
-                  <input
-                    type="checkbox"
-                    checked={requiereInstalacion}
-                    onChange={(e) => setRequiereInstalacion(e.target.checked)}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                  />
-                   ¿El cliente requiere instalación en el taller?
-                </label>
-
-                {requiereInstalacion && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', color: '#AAA', display: 'block', marginBottom: '3px' }}>Fecha (Solo Sábados) *</label>
-                      <input
-                        type="date"
-                        required={requiereInstalacion}
-                        value={fechaCita}
-                        onChange={(e) => {
-                          const f = e.target.value;
-                          if (f && !esSabado(f)) {
-                            alert("Citas no disponibles en esta fecha. Las instalaciones se realizan únicamente los SÁBADOS.");
-                            setFechaCita('');
-                          } else {
-                            setFechaCita(f);
-                          }
-                        }}
-                        style={{ width: '100%', backgroundColor: '#0D0D0D', border: '1px solid #444', color: '#FFF', padding: '8px', borderRadius: '6px', fontSize: '12px' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '11px', color: '#AAA', display: 'block', marginBottom: '3px' }}>Hora de Cita *</label>
-                      <select
-                        required={requiereInstalacion}
-                        value={horaCita}
-                        onChange={(e) => setHoraCita(e.target.value)}
-                        style={{ width: '100%', backgroundColor: '#0D0D0D', border: '1px solid #444', color: '#FFF', padding: '8px', borderRadius: '6px', fontSize: '12px' }}
-                      >
-                        <option value="">-- Seleccionar --</option>
-                        <option value="1:00 PM">1:00 PM</option>
-                        <option value="4:00 PM">4:00 PM</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* SELECCIÓN DE PRODUCTOS */}
               <div>
                 <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#FFB800', display: 'block', marginBottom: '8px' }}>Seleccionar Productos del Inventario:</label>
@@ -719,42 +744,108 @@ export default function HistorialPedidos() {
                 </div>
               </div>
 
-              {/* RESUMEN DE CÁLCULO */}
+              {/* CARRITO Y CONFIGURACIÓN DE INSTALACIÓN POR ÍTEM */}
               {itemsSeleccionados.length > 0 && (
-                <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '6px', border: '1px solid #333', fontSize: '13px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#FFF', display: 'block', marginBottom: '10px' }}>Ítems en el Pedido e Instalaciones:</label>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
                     {itemsSeleccionados.map((item) => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>{item.nombre || item.titulo} (x{item.cantidadSeleccionada})</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>RD$ {Number(item.precio || item.price || 0) * item.cantidadSeleccionada}</span>
-                          <button type="button" onClick={() => cambiarCantidadItem(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
-                          <button type="button" onClick={() => cambiarCantidadItem(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
+                      <div key={item.id} style={{ backgroundColor: '#0D0D0D', padding: '10px', borderRadius: '6px', border: '1px solid #222' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.nombre || item.titulo} (x{item.cantidadSeleccionada})</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', color: '#25D366', fontWeight: 'bold' }}>RD$ {(Number(item.precio || item.price || 0) * item.cantidadSeleccionada).toLocaleString()}</span>
+                            <button type="button" onClick={() => cambiarCantidadItem(item.id, -1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '22px', height: '22px', borderRadius: '4px', cursor: 'pointer' }}>-</button>
+                            <button type="button" onClick={() => cambiarCantidadItem(item.id, 1)} style={{ backgroundColor: '#333', color: '#FFF', border: 'none', width: '22px', height: '22px', borderRadius: '4px', cursor: 'pointer' }}>+</button>
+                          </div>
+                        </div>
+
+                        {/* CHECKBOX DE INSTALACIÓN POR ÍTEM */}
+                        <div style={{ borderTop: '1px solid #222', paddingTop: '8px', marginTop: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#FFB800', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={item.requiereInstalacion || false}
+                              onChange={(e) => actualizarItemInstalacion(item.id, 'requiereInstalacion', e.target.checked)}
+                            />
+                             ¿Este producto requiere instalación?
+                          </label>
+
+                          {item.requiereInstalacion && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
+                              <div>
+                                <label style={{ fontSize: '10px', color: '#AAA', display: 'block' }}>Costo Instalación (RD$)</label>
+                                <input
+                                  type="number"
+                                  value={item.costoInstalacion || 0}
+                                  onChange={(e) => actualizarItemInstalacion(item.id, 'costoInstalacion', Number(e.target.value))}
+                                  style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '10px', color: '#AAA', display: 'block' }}>Fecha (Solo Sábado)</label>
+                                <input
+                                  type="date"
+                                  value={item.fechaCita || ''}
+                                  onChange={(e) => {
+                                    const f = e.target.value;
+                                    if (f && !esSabado(f)) {
+                                      alert("Las instalaciones solo se realizan los SÁBADOS.");
+                                      actualizarItemInstalacion(item.id, 'fechaCita', '');
+                                    } else {
+                                      actualizarItemInstalacion(item.id, 'fechaCita', f);
+                                    }
+                                  }}
+                                  style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '10px', color: '#AAA', display: 'block' }}>Hora de Cita</label>
+                                <select
+                                  value={item.horaCita || ''}
+                                  onChange={(e) => actualizarItemInstalacion(item.id, 'horaCita', e.target.value)}
+                                  style={{ width: '100%', backgroundColor: '#1A1A1A', border: '1px solid #444', color: '#FFF', padding: '6px', borderRadius: '4px', fontSize: '11px' }}
+                                >
+                                  <option value="">-- Hora --</option>
+                                  <option value="1:00 PM">1:00 PM</option>
+                                  <option value="4:00 PM">4:00 PM</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <div style={{ borderTop: '1px solid #333', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA', fontSize: '12px' }}>
-                      <span>Subtotal Productos (Monto para Comisión):</span>
-                      <span style={{ fontWeight: 'bold', color: '#FFF' }}>RD$ {subtotalProductos.toLocaleString()}</span>
+                  {/* RESUMEN FINANCIERO */}
+                  <div style={{ borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA' }}>
+                      <span>Subtotal Productos:</span>
+                      <span style={{ color: '#FFF', fontWeight: 'bold' }}>RD$ {subtotalProductos.toLocaleString()}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA', fontSize: '12px' }}>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA' }}>
+                      <span>Total Instalaciones:</span>
+                      <span style={{ color: '#FFB800', fontWeight: 'bold' }}>RD$ {totalInstalaciones.toLocaleString()}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA' }}>
                       <span>Envío ({zonaSeleccionada.nombre}):</span>
-                      <span>RD$ {costoEnvio.toLocaleString()}</span>
+                      <span style={{ color: hayInstalacion ? '#25D366' : '#FFF', fontWeight: 'bold' }}>
+                        {hayInstalacion ? '¡GRATIS por Instalación!' : `RD$ ${costoEnvioCalculado.toLocaleString()}`}
+                      </span>
                     </div>
 
                     {vendedorSeleccionado && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60A5FA', fontSize: '12px', marginTop: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60A5FA', marginTop: '2px' }}>
                         <span>Comisión Est. Vendedor:</span>
-                        <span>
-                          RD$ {((subtotalProductos * Number(listaVendedores.find(v => v.id === vendedorSeleccionado)?.porcentajeDefecto || 5)) / 100).toLocaleString()}
-                        </span>
+                        <span>RD$ {((subtotalProductos * Number(listaVendedores.find(v => v.id === vendedorSeleccionado)?.porcentajeDefecto || 5)) / 100).toLocaleString()}</span>
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#25D366', fontSize: '15px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#25D366', fontSize: '16px', marginTop: '6px' }}>
                       <span>TOTAL A PAGAR:</span>
                       <span>RD$ {totalGeneral.toLocaleString()}</span>
                     </div>
@@ -788,6 +879,135 @@ export default function HistorialPedidos() {
           </div>
         </div>
       )}
+
+      {/* VISTA Y MODAL DE FACTURA IMPRIMIBLE / PDF */}
+      {facturaParaImprimir && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center',
+          alignItems: 'center', zIndex: 2000, padding: '20px', overflowY: 'auto'
+        }}>
+          <div style={{ width: '100%', maxWidth: '750px', background: '#FFF', color: '#000', borderRadius: '8px', padding: '30px', position: 'relative' }}>
+            
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid #DDD', paddingBottom: '10px' }}>
+              <button
+                onClick={() => setFacturaParaImprimir(null)}
+                style={{ backgroundColor: '#666', color: '#FFF', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => window.print()}
+                style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                 Imprimir / Guardar en PDF
+              </button>
+            </div>
+
+            {/* VISTA DE LA FACTURA */}
+            <div id="seccion-impresion-factura">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '24px', color: '#E50914', textTransform: 'uppercase' }}>GR AUTO ADORNOS</h1>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#555' }}>Accesorios & Instalaciones Electrónicas</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#777' }}>Santo Domingo, República Dominicana | Tel: (809) 555-0199</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h2 style={{ margin: 0, fontSize: '18px', color: '#333' }}>FACTURA</h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '14px', fontWeight: 'bold', color: '#E50914' }}>Orden #{facturaParaImprimir.orderId}</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#555' }}>Fecha: {new Date(facturaParaImprimir.fecha?.seconds ? facturaParaImprimir.fecha.seconds * 1000 : Date.now()).toLocaleDateString('es-DO')}</p>
+                </div>
+              </div>
+
+              {/* DATOS DEL CLIENTE */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', backgroundColor: '#F9F9F9', padding: '12px', borderRadius: '6px', marginBottom: '20px', fontSize: '12px' }}>
+                <div>
+                  <strong>CLIENTE:</strong> {facturaParaImprimir.clienteNombre || facturaParaImprimir.cliente}<br />
+                  <strong>TELÉFONO:</strong> {facturaParaImprimir.telefono}<br />
+                  <strong>CORREO:</strong> {facturaParaImprimir.correo || 'N/A'}
+                </div>
+                <div>
+                  <strong>DIRECCIÓN / ZONA:</strong> {facturaParaImprimir.direccion}<br />
+                  <strong>MÉTODO DE PAGO:</strong> {facturaParaImprimir.metodoPago}<br />
+                  <strong>VENDEDOR:</strong> {facturaParaImprimir.vendedorNombre || 'N/A'}
+                </div>
+              </div>
+
+              {/* TABLA DE ÍTEMS */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#111', color: '#FFF', textAlign: 'left' }}>
+                    <th style={{ padding: '8px' }}>Producto / Ítem</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>Cant.</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Precio Unit.</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Instalación</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {facturaParaImprimir.itemsDetalle ? (
+                    facturaParaImprimir.itemsDetalle.map((item, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #EEE' }}>
+                        <td style={{ padding: '8px' }}>
+                          <strong>{item.nombre || item.titulo}</strong>
+                          {item.requiereInstalacion && (
+                            <div style={{ fontSize: '10px', color: '#D97706' }}>
+                               Cita Taller: {item.fechaCita} a las {item.horaCita}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'center' }}>{item.cantidadSeleccionada}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>RD$ {Number(item.precio || item.price || 0).toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{item.requiereInstalacion ? `RD$ ${Number(item.costoInstalacion || 0).toLocaleString()}` : '-'}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
+                          RD$ {((Number(item.precio || item.price || 0) * item.cantidadSeleccionada) + (item.requiereInstalacion ? Number(item.costoInstalacion || 0) : 0)).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" style={{ padding: '8px' }}>{facturaParaImprimir.detalles}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* DESGLOSE TOTALES */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+                <div style={{ width: '250px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Subtotal Productos:</span>
+                    <span>RD$ {Number(facturaParaImprimir.subtotalProductos || 0).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Total Instalaciones:</span>
+                    <span>RD$ {Number(facturaParaImprimir.totalInstalaciones || 0).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Envío:</span>
+                    <span>RD$ {Number(facturaParaImprimir.costoEnvio || 0).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '4px', fontWeight: 'bold', fontSize: '14px' }}>
+                    <span>TOTAL:</span>
+                    <span>RD$ {Number(facturaParaImprimir.total || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* CUENTAS BANCARIAS */}
+              <div style={{ borderTop: '1px solid #DDD', paddingTop: '10px', fontSize: '10px', color: '#555' }}>
+                <strong>CUENTAS BANCARIAS PARA TRANSFERENCIA:</strong><br />
+                • Banco Popular DOP: Cta. Ahorros N° 814423729<br />
+                • Banreservas DOP: Cta. Corriente N° 9605170252<br />
+                • BHD DOP: Cta. Corriente N° 39485910015<br />
+                • Zelle USD: Landra2916@gmail.com | <strong>Titulares:</strong> Landra Guzman, Freddy Rodriguez
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
