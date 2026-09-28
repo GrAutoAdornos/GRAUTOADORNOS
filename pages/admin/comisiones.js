@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export default function ReporteComisiones() {
@@ -50,11 +50,11 @@ export default function ReporteComisiones() {
   };
 
   const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
-    if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
+    let tarifaInstalacion = 0;
+
     if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
     if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
 
-    let tarifaInstalacion = 0;
     if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
         const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
@@ -87,10 +87,9 @@ export default function ReporteComisiones() {
 
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data();
-        
-        // Filtro estricto: Solo toma las citas que tengan estado Completada / Completado
-        const estadoCita = data.estadoCita || data.estado;
-        if (estadoCita === 'Completada' || estadoCita === 'Completado') {
+        const estado = data.estadoCita || data.estado;
+
+        if (estado === 'Completada' || estado === 'Completado') {
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
@@ -98,7 +97,7 @@ export default function ReporteComisiones() {
           lista.push({
             id: docSnap.id,
             clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
-            vehiculo: data.detalles || data.vehiculo || (Array.isArray(data.productos) ? data.productos.map(p => p.nombre || p.titulo).join(', ') : 'Servicio de Instalación'),
+            vehiculo: data.vehiculo || data.detalles || (Array.isArray(data.productos) ? data.productos.map(p => p.nombre || p.titulo).join(', ') : 'Servicio de Instalación'),
             tecnicoId: data.tecnicoId || '',
             tecnicoNombre: data.tecnicoNombre || 'Sin Asignar',
             precioInstalacion: precioInstalacion,
@@ -193,10 +192,10 @@ export default function ReporteComisiones() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Link href="/admin/citas">
             <button style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-               Volver a Citas
+              ← Volver a Citas
             </button>
           </Link>
-          <h2 style={{ margin: 0, fontSize: '20px' }}> Reporte & Pago de Comisiones</h2>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>👷‍♂️ Reporte & Pago de Comisiones</h2>
         </div>
 
         <Link href="/admin/dashboard">
@@ -227,22 +226,22 @@ export default function ReporteComisiones() {
           style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFB800', border: '1px solid #FFB800', outline: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
           <option value="todos">Todos los Estados (Pendientes y Pagados)</option>
-          <option value="pendiente"> Solo Pendientes de Pago</option>
-          <option value="pagado"> Solo Pagados</option>
+          <option value="pendiente">🔴 Solo Pendientes de Pago</option>
+          <option value="pagado">🟢 Solo Pagados</option>
         </select>
 
         <button 
           onClick={() => setModoRecibo(!modoRecibo)}
           style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          {modoRecibo ? ' Volver a Tabla General' : ' Ver Recibo de Pago'}
+          {modoRecibo ? '📋 Volver a Tabla General' : '🧾 Ver Recibo de Pago'}
         </button>
 
         <button 
           onClick={() => window.print()}
           style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-           Imprimir Recibo
+          🖨️ Imprimir Recibo
         </button>
       </div>
 
@@ -389,7 +388,7 @@ export default function ReporteComisiones() {
                             cursor: 'pointer'
                           }}
                         >
-                          {estaPagado ? ' PAGADO' : ' PENDIENTE'}
+                          {estaPagado ? '✅ PAGADO' : '🔴 PENDIENTE'}
                         </button>
                       </td>
                     </tr>
