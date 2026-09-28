@@ -39,42 +39,49 @@ export default function ReporteComisionesTecnicos() {
 
     snapPedidos.forEach((docSnap) => {
       const data = docSnap.data() || {};
-      const clienteNombre = String(data.cliente || data.clienteNombre || data.nombre || '').trim();
 
-      // BLOQUEO EXPLÍCITO CANCELADAS
-      
+      // 1. Descartar pedidos en estado cancelado o rechazado
       const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
       if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
 
-      // CÁLCULO DE COSTO DE INSTALACIÓN / MANO DE OBRA
+      // 2. CÁLCULO DEL COSTO DE INSTALACIÓN REAL
       let costoInstalacion = 0;
 
-      // Intentar extraer de productos
+      // Evaluar la lista de productos dentro del pedido
       if (Array.isArray(data.productos) && data.productos.length > 0) {
         data.productos.forEach((p) => {
           const cant = Number(p.cantidad || 1);
-          const instProd = Number(p.costoInstalacion || p.precioInstalacion || p.instalacion || p.precioManoObra || 0);
+          const instProd = Number(
+            p.costoInstalacion ?? 
+            p.precioInstalacion ?? 
+            p.instalacion ?? 
+            p.precioManoObra ?? 
+            0
+          );
           costoInstalacion += instProd * cant;
         });
       }
 
-      // Buscar a nivel raíz si sigue en 0
+      // Si los productos no traen costo individual, evaluar la raíz del documento
       if (costoInstalacion === 0) {
         costoInstalacion = Number(
-          data.costoInstalacion || 
-          data.precioInstalacion || 
-          data.montoInstalacion || 
-          data.precioManoObra || 
+          data.costoInstalacion ?? 
+          data.precioInstalacion ?? 
+          data.montoInstalacion ?? 
+          data.precioManoObra ?? 
           0
         );
       }
 
-      // Si aún así no encuentra el valor específico (como en el caso de Freddy), usar el valor base estándar del servicio
-      if (costoInstalacion === 0) {
-        costoInstalacion = Number(data.montoTotal || data.precioTotal || 0);
+      // REGULARIZACIÓN AUTOMÁTICA: Si el pedido no especifica un costo de instalación explicito pero sí tiene un monto de instalacion registrado en el tipo de servicio
+      if (costoInstalacion === 0 && (data.tipoServicio === 'instalacion' || data.requiereInstalacion === true)) {
+        costoInstalacion = Number(data.montoInstalacion || data.costoManoObra || 0);
       }
 
-      // Buscar técnico asignado
+      // FILTRO AUTOMÁTICO GENERAL: Si NO tiene costo de instalación (<= 0), no califica para comisión y se ignora por completo
+      if (costoInstalacion <= 0) return;
+
+      // 3. IDENTIFICACIÓN DE TÉCNICO Y PORCENTAJE
       let tecObj = listaTec.find(t => t.id === data.tecnicoId);
       if (!tecObj && data.tecnicoNombre) {
         tecObj = listaTec.find(t => String(t.nombre || '').toLowerCase().trim() === String(data.tecnicoNombre).toLowerCase().trim());
@@ -83,22 +90,22 @@ export default function ReporteComisionesTecnicos() {
       const tecnicoNombre = tecObj ? tecObj.nombre : (data.tecnicoNombre || 'Sin Asignar');
       const tecnicoId = tecObj ? tecObj.id : (data.tecnicoId || '');
 
-      // Obtener Porcentaje del Técnico
+      // Obtener Porcentaje asignado (del pedido o del perfil del técnico)
       let porcentaje = Number(data.porcentajeComision || data.porcentaje) || 0;
       if (porcentaje === 0 && tecObj) {
-        porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 0);
+        porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
       }
 
-      // CALCULO DE COMISIÓN DIRECTO
+      // 4. CÁLCULO DE COMISIÓN
       const montoComision = (costoInstalacion * porcentaje) / 100;
 
-      // Resumen del Vehículo / Producto
+      // Resumen del trabajo
       let detalleTrabajo = data.detalles || data.vehiculo;
       if (!detalleTrabajo && Array.isArray(data.productos)) {
         detalleTrabajo = data.productos.map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`).join(', ');
       }
 
-      // Formatear Fecha
+      // Formato de Fecha
       let fechaTexto = new Date().toLocaleDateString();
       if (data.fechaInstalacion || data.fechaCita || data.fecha) {
         const f = data.fechaInstalacion || data.fechaCita || data.fecha;
@@ -107,7 +114,7 @@ export default function ReporteComisionesTecnicos() {
 
       listaFinal.push({
         id: docSnap.id,
-        clienteNombre: clienteNombre || 'Cliente General',
+        clienteNombre: data.cliente || data.clienteNombre || data.nombre || 'Cliente General',
         vehiculoServicio: detalleTrabajo || 'Servicio de Instalación',
         tecnicoId: tecnicoId,
         tecnicoNombre: tecnicoNombre,
@@ -133,13 +140,12 @@ export default function ReporteComisionesTecnicos() {
     }
   };
 
-  // Filtrado general
+  // Filtrado de la vista
   const citasFiltradas = citasList.filter((item) => {
     if (tecnicoFiltro !== 'todos' && item.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && item.estadoPagoTecnico !== 'pendiente') return false;
     if (filtroPago === 'pagado' && item.estadoPagoTecnico !== 'pagado') return false;
     
-    // Filtro de Estado de Cita
     const esComp = item.estadoCita === 'completada' || item.estadoCita === 'completado';
     if (filtroEstadoCita === 'completada' && !esComp) return false;
     if (filtroEstadoCita === 'pendiente' && esComp) return false;
@@ -180,7 +186,7 @@ export default function ReporteComisionesTecnicos() {
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Control de Comisiones de Técnicos</h1>
-          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Cálculo exacto basado en costo de instalación</p>
+          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Filtro automático: solo se procesan pedidos con costo de instalación</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link href="/admin/citas">
@@ -320,7 +326,7 @@ export default function ReporteComisionesTecnicos() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas Evaluadas</p>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas con Instalación</p>
               <h3 style={{ margin: '5px 0 0 0', color: '#FFF', fontSize: '22px' }}>{citasFiltradas.length}</h3>
             </div>
 
@@ -366,7 +372,6 @@ export default function ReporteComisionesTecnicos() {
                       </td>
                       <td style={{ padding: '12px', fontSize: '13px' }}>{item.tecnicoNombre}</td>
                       
-                      {/* ESTADO CITA: VERDE PARA COMPLETADA, ROJO PARA PENDIENTE */}
                       <td style={{ padding: '12px', fontSize: '12px', fontWeight: 'bold' }}>
                         <span style={{
                           backgroundColor: esCompletada ? '#1C3829' : '#381C1C',
@@ -411,7 +416,7 @@ export default function ReporteComisionesTecnicos() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No se encontraron registros.
+                      No hay pedidos con servicio de instalación registrado.
                     </td>
                   </tr>
                 )}
