@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import Link from 'next/link';
 
 export default function ComisionesVendedores() {
   const [vendedores, setVendedores] = useState([]);
   const [pedidos, setPedidos] = useState([]);
-  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('');
-  const [estadoComisionFiltro, setEstadoComisionFiltro] = useState('Pendiente'); // Pendiente, Completado, todos
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos'); // Opción 'todos' por defecto
+  const [estadoComisionFiltro, setEstadoComisionFiltro] = useState('todos'); // Pendiente, Completado, todos
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Estado para el Recibo Consolidado (Quincenal / Mensual)
+  // Estado para el Recibo Consolidado
   const [reciboConsolidado, setReciboConsolidado] = useState(null);
 
   useEffect(() => {
@@ -27,9 +27,6 @@ export default function ComisionesVendedores() {
       const snapVendedores = await getDocs(collection(db, 'vendedores'));
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
-      if (listaVendedores.length > 0) {
-        setVendedorSeleccionado(listaVendedores[0].id);
-      }
 
       // 2. Cargar Pedidos (colección 'pedidos')
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
@@ -77,23 +74,14 @@ export default function ComisionesVendedores() {
     return null;
   };
 
-  // FILTRADO ESTRICTO DE PEDIDOS
+  // FILTRADO DE PEDIDOS
   const pedidosFiltrados = pedidos.filter(pedido => {
-    // 1. SOLO PEDIDOS CON ORDEN COMPLETADA Y PAGO DEL CLIENTE REALIZADO
-    const estadoOrden = (pedido.estado || pedido.estadoPedido || '').toLowerCase();
-    const estadoPagoCliente = (pedido.estadoPago || pedido.pagoEstado || '').toLowerCase();
-
-    const estaCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
-    const estaPagado = estadoPagoCliente === 'pagado' || estadoPagoCliente === 'completado' || estadoPagoCliente === 'confirmado';
-
-    // Descomentar si requieres validación estricta de estado de pedido en DB:
-    // if (!estaCompletado || !estaPagado) return false;
-
-    // 2. FILTRO VENDEDOR
+    // 1. Validar si tiene vendedor asignado
     const nombreVendedor = obtenerNombreVendedor(pedido);
     if (!nombreVendedor && !pedido.vendedorId) return false;
 
-    if (vendedorSeleccionado && vendedorSeleccionado !== 'todos') {
+    // 2. Filtro Selector por Vendedor (Acepta 'todos')
+    if (vendedorSeleccionado !== 'todos') {
       const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
       const nombreTarget = vObj ? vObj.nombre : '';
 
@@ -104,13 +92,14 @@ export default function ComisionesVendedores() {
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // 3. FILTRO ESTADO DE COMISIÓN (Pendiente vs Completado/Pagado)
+    // 3. Filtro Estado de Comisión
     const estadoComision = pedido.estadoComision || 'Pendiente';
-    if (estadoComisionFiltro !== 'todos' && estadoComision !== estadoComisionFiltro) {
-      return false;
+    if (estadoComisionFiltro !== 'todos') {
+      if (estadoComisionFiltro === 'Pendiente' && estadoComision === 'Completado') return false;
+      if (estadoComisionFiltro === 'Completado' && estadoComision !== 'Completado') return false;
     }
 
-    // 4. FILTRO FECHAS (Quincena / Mes)
+    // 4. Filtro por Fechas
     const fRaw = pedido.fecha || pedido.createdAt || pedido.fechaCreacion;
     if (fRaw) {
       const fechaOrden = fRaw.seconds ? new Date(fRaw.seconds * 1000) : new Date(fRaw);
@@ -131,7 +120,7 @@ export default function ComisionesVendedores() {
     return true;
   });
 
-  // TOTALES DEL PERÍODO
+  // TOTALES GENERALES DEL FILTRO
   const totalVendidoPeriodo = pedidosFiltrados.reduce((sum, p) => sum + obtenerMontoBase(p), 0);
 
   const totalComisionPeriodo = pedidosFiltrados.reduce((sum, p) => {
@@ -145,11 +134,43 @@ export default function ComisionesVendedores() {
     return sum + (base * (pct / 100));
   }, 0);
 
-  // MARCAR TODA LA LIQUIDACIÓN / QUINCENA COMO PAGADA
-  const handlePagarLiquidacion = async () => {
-    if (pedidosFiltrados.length === 0) return alert("No hay comisiones para liquidar en este filtro.");
+  // CAMBIAR/REVERTIR ESTADO DE COMISIÓN
+  const handleToggleEstadoComision = async (pedidoId, estadoActual) => {
+    const nuevoEstado = estadoActual === 'Completado' ? 'Pendiente' : 'Completado';
+    try {
+      await updateDoc(doc(db, 'pedidos', pedidoId), {
+        estadoComision: nuevoEstado,
+        fechaPagoComision: nuevoEstado === 'Completado' ? new Date().toISOString() : null
+      });
 
-    if (!confirm(`¿Confirmas el pago de RD$ ${totalComisionPeriodo.toLocaleString()} correspondiente a ${pedidosFiltrados.length} órdenes?`)) {
+      setPedidos(prev =>
+        prev.map(p => (p.id === pedidoId ? { ...p, estadoComision: nuevoEstado } : p))
+      );
+    } catch (error) {
+      console.error("Error al actualizar estado:", error);
+      alert("No se pudo cambiar el estado de la comisión.");
+    }
+  };
+
+  // ELIMINAR REGISTRO DE PRUEBA
+  const handleEliminarPedido = async (pedidoId) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar este registro de prueba?")) return;
+
+    try {
+      await deleteDoc(doc(db, 'pedidos', pedidoId));
+      setPedidos(prev => prev.filter(p => p.id !== pedidoId));
+      alert("Registro eliminado correctamente.");
+    } catch (error) {
+      console.error("Error al eliminar pedido:", error);
+      alert("Error al eliminar el documento.");
+    }
+  };
+
+  // MARCAR TODA LA LIQUIDACIÓN FILTRADA COMO PAGADA
+  const handlePagarLiquidacion = async () => {
+    if (pedidosFiltrados.length === 0) return alert("No hay comisiones en pantalla para liquidar.");
+
+    if (!confirm(`¿Confirmas el pago de RD$ ${totalComisionPeriodo.toLocaleString()} correspondiente a ${pedidosFiltrados.length} registro(s)?`)) {
       return;
     }
 
@@ -167,7 +188,6 @@ export default function ComisionesVendedores() {
 
       await batch.commit();
 
-      // Actualizar estado local
       setPedidos(prev =>
         prev.map(p => {
           if (pedidosFiltrados.some(pf => pf.id === p.id)) {
@@ -180,16 +200,26 @@ export default function ComisionesVendedores() {
       alert("✅ Liquidación completada exitosamente.");
     } catch (error) {
       console.error("Error al liquidar comisiones:", error);
-      alert("Hubo un error al procesar el pago masivo.");
+      alert("Hubo un error al procesar la liquidación.");
     }
   };
 
-  // PREPARAR RECIBO CONSOLIDADO DEL PERÍODO
+  // PREPARAR RECIBO CONSOLIDADO
   const handleGenerarReciboConsolidado = () => {
-    const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
+    let nombreVendedor = 'Todos los Vendedores';
+    let cedulaVendedor = 'N/A';
+
+    if (vendedorSeleccionado !== 'todos') {
+      const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
+      if (vObj) {
+        nombreVendedor = vObj.nombre;
+        cedulaVendedor = vObj.cedula || vObj.telefono || 'N/A';
+      }
+    }
+
     setReciboConsolidado({
-      vendedorNombre: vObj ? vObj.nombre : 'Vendedor',
-      vendedorCedula: vObj?.cedula || vObj?.telefono || 'N/A',
+      vendedorNombre: nombreVendedor,
+      vendedorCedula: cedulaVendedor,
       fechaInicio: fechaInicio || 'Inicio de Registro',
       fechaFin: fechaFin || 'Fecha Actual',
       pedidos: pedidosFiltrados,
@@ -224,7 +254,7 @@ export default function ComisionesVendedores() {
         </div>
       </header>
 
-      {/* FILTROS LIQUIDACIÓN */}
+      {/* FILTROS */}
       <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', marginBottom: '20px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div>
           <label style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px' }}>Vendedor:</label>
@@ -233,6 +263,7 @@ export default function ComisionesVendedores() {
             onChange={(e) => setVendedorSeleccionado(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', minWidth: '180px' }}
           >
+            <option value="todos">👥 Todos los vendedores</option>
             {vendedores.map(v => (
               <option key={v.id} value={v.id}>{v.nombre}</option>
             ))}
@@ -246,9 +277,9 @@ export default function ComisionesVendedores() {
             onChange={(e) => setEstadoComisionFiltro(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444' }}
           >
-            <option value="Pendiente">⏳ Pendientes de Pago</option>
-            <option value="Completado">✅ Pagadas / Liquidadas</option>
             <option value="todos">Todas las ventas</option>
+            <option value="Pendiente">⏳ Pendientes de Pago</option>
+            <option value="Completado">✅ Liquidadas</option>
           </select>
         </div>
 
@@ -285,17 +316,15 @@ export default function ComisionesVendedores() {
           <h3 style={{ margin: '5px 0 0 0', fontSize: '22px', color: '#4caf50' }}>RD$ {totalComisionPeriodo.toLocaleString()}</h3>
         </div>
 
-        {/* ACCIONES DE LIQUIDACIÓN Y RECIBO CONSOLIDADO */}
+        {/* ACCIONES DE LIQUIDACIÓN */}
         <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
-          {estadoComisionFiltro === 'Pendiente' && (
-            <button
-              onClick={handlePagarLiquidacion}
-              disabled={pedidosFiltrados.length === 0}
-              style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#2e7d32' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
-            >
-              💵 Liquidar / Pagar Período
-            </button>
-          )}
+          <button
+            onClick={handlePagarLiquidacion}
+            disabled={pedidosFiltrados.length === 0}
+            style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#2e7d32' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+          >
+            💵 Liquidar Todo lo Filtrado
+          </button>
 
           <button
             onClick={handleGenerarReciboConsolidado}
@@ -307,7 +336,7 @@ export default function ComisionesVendedores() {
         </div>
       </div>
 
-      {/* TABLA DE DETALLE DE PEDIDOS DE LA QUINCENA/MES */}
+      {/* TABLA DE DETALLE */}
       {loading ? (
         <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Cargando información...</p>
       ) : (
@@ -315,11 +344,13 @@ export default function ComisionesVendedores() {
           <thead>
             <tr style={{ backgroundColor: '#222', color: '#FFF' }}>
               <th style={{ padding: '10px' }}>Orden #</th>
+              <th style={{ padding: '10px' }}>Vendedor</th>
               <th style={{ padding: '10px' }}>Cliente</th>
               <th style={{ padding: '10px' }}>Monto Venta</th>
               <th style={{ padding: '10px' }}>% Com.</th>
               <th style={{ padding: '10px' }}>Monto Comisión</th>
-              <th style={{ padding: '10px' }}>Estado Comisión</th>
+              <th style={{ padding: '10px' }}>Estado Comisión (Haz clic para cambiar)</th>
+              <th style={{ padding: '10px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -340,30 +371,57 @@ export default function ComisionesVendedores() {
               return (
                 <tr key={pedido.id} style={{ borderBottom: '1px solid #333' }}>
                   <td style={{ padding: '10px' }}>#{numOrden}</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreV}</td>
                   <td style={{ padding: '10px', color: '#AAA' }}>{nombreC}</td>
                   <td style={{ padding: '10px' }}>RD$ {baseMonto.toLocaleString()}</td>
                   <td style={{ padding: '10px' }}>{pct}%</td>
                   <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
+                  
+                  {/* ESTADO COMISIÓN INTERACTIVO */}
                   <td style={{ padding: '10px' }}>
-                    <span style={{
-                      backgroundColor: estadoComision === 'Completado' ? '#1B382B' : '#3D2A10',
-                      color: estadoComision === 'Completado' ? '#25D366' : '#FFB800',
-                      border: `1px solid ${estadoComision === 'Completado' ? '#25D366' : '#FFB800'}`,
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 'bold'
-                    }}>
+                    <button
+                      onClick={() => handleToggleEstadoComision(pedido.id, estadoComision)}
+                      title="Haz clic para alternar entre Liquidado y Pendiente"
+                      style={{
+                        backgroundColor: estadoComision === 'Completado' ? '#1B382B' : '#3D2A10',
+                        color: estadoComision === 'Completado' ? '#25D366' : '#FFB800',
+                        border: `1px solid ${estadoComision === 'Completado' ? '#25D366' : '#FFB800'}`,
+                        padding: '5px 10px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
                       {estadoComision === 'Completado' ? '✅ Liquidado' : '⏳ Pendiente'}
-                    </span>
+                    </button>
+                  </td>
+
+                  {/* ACCIÓN ELIMINAR REGISTRO */}
+                  <td style={{ padding: '10px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleEliminarPedido(pedido.id)}
+                      title="Eliminar este registro de prueba"
+                      style={{
+                        backgroundColor: '#331111',
+                        color: '#FF4D4D',
+                        border: '1px solid #FF4D4D',
+                        padding: '5px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️
+                    </button>
                   </td>
                 </tr>
               );
             })}
             {pedidosFiltrados.length === 0 && (
               <tr>
-                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                  No hay ventas válidas ni pagadas para este vendedor en el rango seleccionado.
+                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                  No hay ventas registradas para el filtro seleccionado.
                 </td>
               </tr>
             )}
@@ -397,7 +455,7 @@ export default function ComisionesVendedores() {
             </div>
 
             <div style={{ backgroundColor: '#F8F9FA', padding: '12px', borderRadius: '6px', border: '1px solid #EEE', marginBottom: '15px', fontSize: '13px' }}>
-              <p style={{ margin: '0 0 4px 0' }}><strong>Vendedor:</strong> {reciboConsolidado.vendedorNombre}</p>
+              <p style={{ margin: '0 0 4px 0' }}><strong>Vendedor(es):</strong> {reciboConsolidado.vendedorNombre}</p>
               <p style={{ margin: 0 }}><strong>Cédula/Contacto:</strong> {reciboConsolidado.vendedorCedula}</p>
             </div>
 
@@ -406,6 +464,7 @@ export default function ComisionesVendedores() {
               <thead>
                 <tr style={{ backgroundColor: '#F0F0F0', textAlign: 'left', borderBottom: '1px solid #CCC' }}>
                   <th style={{ padding: '6px' }}>Orden #</th>
+                  <th style={{ padding: '6px' }}>Vendedor</th>
                   <th style={{ padding: '6px' }}>Monto Venta</th>
                   <th style={{ padding: '6px' }}>%</th>
                   <th style={{ padding: '6px', textAlign: 'right' }}>Comisión</th>
@@ -414,7 +473,8 @@ export default function ComisionesVendedores() {
               <tbody>
                 {reciboConsolidado.pedidos.map(p => {
                   const baseMonto = obtenerMontoBase(p);
-                  const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
+                  const nombreV = obtenerNombreVendedor(p) || 'N/A';
+                  const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
                   const pct = Number(p.vendedorPorcentaje || p.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
                   const comision = (p.montoComisionVendedor !== undefined && Number(p.montoComisionVendedor) > 0)
                     ? Number(p.montoComisionVendedor) 
@@ -423,6 +483,7 @@ export default function ComisionesVendedores() {
                   return (
                     <tr key={p.id} style={{ borderBottom: '1px solid #EEE' }}>
                       <td style={{ padding: '6px' }}>#{p.orderId || p.id.slice(-6)}</td>
+                      <td style={{ padding: '6px' }}>{nombreV}</td>
                       <td style={{ padding: '6px' }}>RD$ {baseMonto.toLocaleString()}</td>
                       <td style={{ padding: '6px' }}>{pct}%</td>
                       <td style={{ padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
@@ -434,7 +495,7 @@ export default function ComisionesVendedores() {
 
             {/* RESUMEN DE TOTALES */}
             <div style={{ backgroundColor: '#E8F5E9', padding: '12px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <span style={{ fontWeight: 'bold', color: '#2E7D32', fontSize: '14px' }}>TOTAL GENERAL A PAGAR:</span>
+              <span style={{ fontWeight: 'bold', color: '#2E7D32', fontSize: '14px' }}>TOTAL DESEMBOLSO COMISIONES:</span>
               <span style={{ fontWeight: 'bold', color: '#2E7D32', fontSize: '18px' }}>RD$ {reciboConsolidado.totalPagar.toLocaleString()}</span>
             </div>
 
@@ -446,7 +507,7 @@ export default function ComisionesVendedores() {
               </div>
               <div style={{ width: '45%' }}>
                 <div style={{ borderBottom: '1px solid #000', marginBottom: '4px', height: '35px' }}></div>
-                <span>Recibido Conforme (Vendedor)</span>
+                <span>Recibido Conforme</span>
               </div>
             </div>
 
