@@ -6,8 +6,8 @@ import Link from 'next/link';
 export default function ComisionesVendedores() {
   const [vendedores, setVendedores] = useState([]);
   const [pedidos, setPedidos] = useState([]);
-  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos'); // Opción 'todos' por defecto
-  const [estadoComisionFiltro, setEstadoComisionFiltro] = useState('todos'); // Pendiente, Completado, todos
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos');
+  const [estadoComisionFiltro, setEstadoComisionFiltro] = useState('todos');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,16 +28,18 @@ export default function ComisionesVendedores() {
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
 
-      // 2. Cargar Pedidos (colección 'pedidos')
+      // 2. Cargar Pedidos y Ordenes de forma combinada para no omitir registros
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
-      let listaPedidos = snapPedidos.docs.map(d => ({ id: d.id, ...d.data() }));
+      const listaP = snapPedidos.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      if (listaPedidos.length === 0) {
-        const snapOrdenes = await getDocs(collection(db, 'ordenes'));
-        listaPedidos = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
-      }
+      const snapOrdenes = await getDocs(collection(db, 'ordenes'));
+      const listaO = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      setPedidos(listaPedidos);
+      // Unificar evitando duplicados por ID
+      const mapaPedidos = new Map();
+      [...listaP, ...listaO].forEach(item => mapaPedidos.set(item.id, item));
+
+      setPedidos(Array.from(mapaPedidos.values()));
     } catch (error) {
       console.error("Error al cargar datos:", error);
     } finally {
@@ -74,25 +76,23 @@ export default function ComisionesVendedores() {
     return null;
   };
 
-  // FILTRADO DE PEDIDOS (CON CONDICIONAL ESTRICTA DE PAGO Y ENTREGA)
+  // FILTRADO DE PEDIDOS (MEJORADO)
   const pedidosFiltrados = pedidos.filter(pedido => {
-    // 1. VALIDACIÓN OBLIGATORIA: Pedido Completado Y Pago Confirmado
-    const estadoOrden = String(pedido.estado || pedido.estadoPedido || '').toLowerCase().trim();
+    // 1. Validar que la orden esté COMPLETADA / PAGADA / ENTREGADA
+    const estadoOrden = String(pedido.estado || pedido.estadoPedido || pedido.status || '').toLowerCase().trim();
     const estadoPagoCliente = String(pedido.estadoPago || pedido.pagoEstado || '').toLowerCase().trim();
 
-    const estaCompletado = estadoOrden === 'completado' || estadoOrden === 'entregado' || estadoOrden === 'finalizado';
-    const estaPagado = estadoPagoCliente === 'pagado' || estadoPagoCliente === 'completado' || estadoPagoCliente === 'confirmado';
+    const estaCompletado = ['completado', 'completada', 'entregado', 'finalizado'].includes(estadoOrden);
+    const estaPagado = ['pagado', 'pagada', 'completado', 'confirmado'].includes(estadoPagoCliente);
 
-    // Si la orden o el pago están pendientes, SE IGNORA POR COMPLETO (No sube comisión)
-    if (!estaCompletado || !estaPagado) {
-      return false;
-    }
+    // Si la orden no está completada ni pagada, no entra al cálculo de comisiones
+    if (!estaCompletado && !estaPagado) return false;
 
     // 2. Validar si tiene vendedor asignado
     const nombreVendedor = obtenerNombreVendedor(pedido);
     if (!nombreVendedor && !pedido.vendedorId) return false;
 
-    // 3. Filtro Selector por Vendedor (Acepta 'todos')
+    // 3. Filtro Selector por Vendedor
     if (vendedorSeleccionado !== 'todos') {
       const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
       const nombreTarget = vObj ? vObj.nombre : '';
@@ -104,7 +104,7 @@ export default function ComisionesVendedores() {
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // 4. Filtro Estado de Liquidación de la Comisión
+    // 4. Filtro Estado de Comisión
     const estadoComision = pedido.estadoComision || 'Pendiente';
     if (estadoComisionFiltro !== 'todos') {
       if (estadoComisionFiltro === 'Pendiente' && estadoComision === 'Completado') return false;
@@ -255,7 +255,7 @@ export default function ComisionesVendedores() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link href="/admin/vendedores">
             <button style={{ backgroundColor: '#0070f3', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              Gestionar Vendedores
+               Gestionar Vendedores
             </button>
           </Link>
           <Link href="/admin/dashboard">
@@ -335,7 +335,7 @@ export default function ComisionesVendedores() {
             disabled={pedidosFiltrados.length === 0}
             style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#2e7d32' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            Liquidar Todo lo Filtrado
+             Liquidar Todo lo Filtrado
           </button>
 
           <button
@@ -343,7 +343,7 @@ export default function ComisionesVendedores() {
             disabled={pedidosFiltrados.length === 0}
             style={{ backgroundColor: pedidosFiltrados.length > 0 ? '#0070f3' : '#444', color: '#FFF', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            Generar Recibo de Pago Global
+             Generar Recibo de Pago Global
           </button>
         </div>
       </div>
@@ -405,7 +405,7 @@ export default function ComisionesVendedores() {
                         cursor: 'pointer'
                       }}
                     >
-                      {estadoComision === 'Completado' ? 'Liquidado' : 'Pendiente'}
+                      {estadoComision === 'Completado' ? ' Liquidado' : ' Pendiente'}
                     </button>
                   </td>
 
@@ -424,7 +424,7 @@ export default function ComisionesVendedores() {
                         fontSize: '12px'
                       }}
                     >
-                      🗑️
+                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -433,7 +433,7 @@ export default function ComisionesVendedores() {
             {pedidosFiltrados.length === 0 && (
               <tr>
                 <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                  No hay ventas cobradas y completadas registradas para el filtro seleccionado.
+                  No hay ventas registradas para el filtro seleccionado.
                 </td>
               </tr>
             )}
@@ -535,7 +535,7 @@ export default function ComisionesVendedores() {
                 onClick={() => window.print()}
                 style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
               >
-                Imprimir / Guardar PDF
+                 Imprimir / Guardar PDF
               </button>
             </div>
 
