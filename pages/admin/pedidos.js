@@ -297,7 +297,7 @@ export default function HistorialPedidos() {
         mapaStockADescontar[i.productoId] = (mapaStockADescontar[i.productoId] || 0) + 1;
       });
 
-      // Si hay instalación, tomamos la fecha y hora de la primera unidad para poblar la raíz
+      // Si hay instalación, tomamos la fecha, hora y mano de obra de la primera unidad
       const primeraInstalacion = itemsConInstalacion[0] || {};
 
       const datosPedido = {
@@ -320,9 +320,16 @@ export default function HistorialPedidos() {
         fidelizacionContactado: false,
         fechaCreacion: new Date(),
         fecha: primeraInstalacion.fechaCita || new Date(),
+        
+        // Campos clave para compatibilidad directa con CitasAdmin
+        fechaInstalacion: primeraInstalacion.fechaCita || '',
+        horaInstalacion: primeraInstalacion.horaCita || '',
         fechaCita: primeraInstalacion.fechaCita || '',
         horaCita: primeraInstalacion.horaCita || '',
         hora: primeraInstalacion.horaCita || '',
+        estadoCita: 'Pendiente',
+        precioManoObra: Number(primeraInstalacion.costoInstalacion || totalInstalaciones || 0),
+        
         origen: 'Manual (WhatsApp/Llamada)',
         requiereInstalacion: hayInstalacion,
         
@@ -383,11 +390,16 @@ export default function HistorialPedidos() {
             clienteTelefono: telefonoCliente,
             productoNombre: itemInstalacion.nombre,
             producto: itemInstalacion.nombre,
+            detalles: `${itemInstalacion.nombre} (Unidad #${index + 1}) - Orden #${orderId}`,
             costoInstalacion: Number(itemInstalacion.costoInstalacion || 0),
+            precioManoObra: Number(itemInstalacion.costoInstalacion || 0),
+            fechaInstalacion: itemInstalacion.fechaCita,
+            horaInstalacion: itemInstalacion.horaCita,
             fechaCita: itemInstalacion.fechaCita,
             fecha: itemInstalacion.fechaCita,
             horaCita: itemInstalacion.horaCita,
             hora: itemInstalacion.horaCita,
+            estadoCita: 'Pendiente',
             estado: 'Pendiente',
             fechaCreacion: new Date(),
             origen: 'Pedido Manual',
@@ -649,7 +661,7 @@ export default function HistorialPedidos() {
                 <img src="/LOGO NEGRO.jpeg" alt="Logo" style={{ width: '35px', height: '35px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
                 <h3 style={{ margin: 0, color: '#E50914', fontSize: '18px' }}>Registrar Pedido Manual</h3>
               </div>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}></button>
             </div>
 
             <form onSubmit={handleCrearPedidoManual} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
