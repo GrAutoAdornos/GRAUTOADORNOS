@@ -212,6 +212,15 @@ export default function HistorialPedidos() {
 
   const subtotalProductos = itemsSeleccionados.reduce((acc, item) => acc + (Number(item.precio || item.price || 0) * item.cantidadSeleccionada), 0);
   const costoEnvio = zonaSeleccionada.costo;
+  const subtotalInstalaciones = cart.reduce((acc, item) => {
+    if (item.incluirInstalacion && (item.requiereInstalacion || item.costoInstalacion)) {
+      return acc + (Number(item.costoInstalacion || 0) * item.cantidad);
+    }
+    return acc;
+  }, 0);
+
+  const tieneInstalacionSeleccionada = cart.some((item) => item.incluirInstalacion);
+  const costoEnvio = tieneInstalacionSeleccionada ? 0 : tarifasEnvio[zonaEnvio].costo;
   const totalGeneral = subtotalProductos + costoEnvio;
 
   const handleCrearPedidoManual = async (e) => {
