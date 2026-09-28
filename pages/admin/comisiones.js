@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
-export default function ReporteComisionesTecnicos() {
-  const [citasList, setCitasList] = useState([]);
+export default function ReporteComisiones() {
+  const router = useRouter();
+  const [citasCompletadas, setCitasCompletadas] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
   const [filtroPago, setFiltroPago] = useState('todos');
-  const [filtroEstadoCita, setFiltroEstadoCita] = useState('todos');
   const [loading, setLoading] = useState(true);
   const [modoRecibo, setModoRecibo] = useState(false);
 
@@ -19,387 +20,367 @@ export default function ReporteComisionesTecnicos() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      // 1. Cargar Técnicos
-      const snapTecnicos = await getDocs(collection(db, 'tecnicos'));
-      const listaTec = snapTecnicos.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setTecnicos(listaTec);
+      const snapProductos = await getDocs(collection(db, 'productos'));
+      const mapaProductos = {};
+      snapProductos.forEach((doc) => {
+        const prodData = doc.data();
+        const nombreProd = (prodData.nombre || doc.id).toLowerCase().trim();
+        mapaProductos[nombreProd] = Number(prodData.precioInstalacion || prodData.instalacion || prodData.costoInstalacion || 0);
+      });
 
-      // 2. Cargar Citas / Pedidos
-      await cargarCitas(listaTec);
+      await Promise.all([obtenerTecnicos(), obtenerCitasCompletadas(mapaProductos)]);
     } catch (error) {
-      console.error("Error al cargar datos:", error);
+      console.error("Error al cargar la información:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const cargarCitas = async (listaTec) => {
-    const snapPedidos = await getDocs(collection(db, 'pedidos'));
-    let listaFinal = [];
+  const obtenerTecnicos = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'tecnicos'));
+      const listaTecnicos = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTecnicos(listaTecnicos);
+    } catch (error) {
+      console.error("Error al obtener técnicos:", error);
+    }
+  };
 
-    snapPedidos.forEach((docSnap) => {
-      const data = docSnap.data() || {};
+  const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
+    let tarifaInstalacion = 0;
 
-      // 1. Descartar pedidos cancelados / rechazados
-      const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
-      if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
+    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
+    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
 
-      // 2. EXTRAER COSTO BASE DE INSTALACIÓN / SERVICIO
-      let costoInstalacion = 0;
-
-      // Buscar en lista de productos si existe
-      if (Array.isArray(data.productos) && data.productos.length > 0) {
-        data.productos.forEach((p) => {
-          const cant = Number(p.cantidad || 1);
-          const instProd = Number(
-            p.costoInstalacion ?? 
-            p.precioInstalacion ?? 
-            p.instalacion ?? 
-            p.precioManoObra ?? 
-            0
-          );
-          costoInstalacion += instProd * cant;
-        });
-      }
-
-      // Buscar en campos específicos de raíz
-      if (costoInstalacion === 0) {
-        costoInstalacion = Number(
-          data.costoInstalacion ?? 
-          data.precioInstalacion ?? 
-          data.montoInstalacion ?? 
-          data.precioManoObra ?? 
-          0
-        );
-      }
-
-      // FALLBACK AUTOMÁTICO: Si no hay un desglose explícito de mano de obra, usa el total del servicio/pedido
-      if (costoInstalacion === 0) {
-        costoInstalacion = Number(data.montoTotal ?? data.total ?? data.precio ?? data.monto ?? 0);
-      }
-
-      // Ignorar si realmente no hay monto alguno asignado (registros vacíos)
-      if (costoInstalacion <= 0) return;
-
-      // 3. IDENTIFICAR TÉCNICO
-      let tecObj = listaTec.find(t => t.id === data.tecnicoId);
-      if (!tecObj && data.tecnicoNombre) {
-        tecObj = listaTec.find(t => String(t.nombre || '').toLowerCase().trim() === String(data.tecnicoNombre).toLowerCase().trim());
-      }
-
-      const tecnicoNombre = tecObj ? tecObj.nombre : (data.tecnicoNombre || 'Sin Asignar');
-      const tecnicoId = tecObj ? tecObj.id : (data.tecnicoId || '');
-
-      // Obtener Porcentaje del Técnico
-      let porcentaje = Number(data.porcentajeComision || data.porcentaje) || 0;
-      if (porcentaje === 0 && tecObj) {
-        porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
-      }
-
-      // 4. CÁLCULO DE COMISIÓN
-      const montoComision = (costoInstalacion * porcentaje) / 100;
-
-      // Resumen del Vehículo o Producto
-      let detalleTrabajo = data.detalles || data.vehiculo;
-      if (!detalleTrabajo && Array.isArray(data.productos)) {
-        detalleTrabajo = data.productos.map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`).join(', ');
-      }
-
-      // Formato de Fecha
-      let fechaTexto = new Date().toLocaleDateString();
-      if (data.fechaInstalacion || data.fechaCita || data.fecha) {
-        const f = data.fechaInstalacion || data.fechaCita || data.fecha;
-        fechaTexto = f?.toDate ? f.toDate().toLocaleDateString() : String(f);
-      }
-
-      listaFinal.push({
-        id: docSnap.id,
-        clienteNombre: data.cliente || data.clienteNombre || data.nombre || 'Cliente General',
-        vehiculoServicio: detalleTrabajo || 'Servicio de Instalación',
-        tecnicoId: tecnicoId,
-        tecnicoNombre: tecnicoNombre,
-        costoInstalacion: costoInstalacion,
-        porcentajeComision: porcentaje,
-        montoComision: montoComision,
-        estadoCita: estadoCita,
-        estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
-        fecha: fechaTexto
+    if (Array.isArray(data.productos) && data.productos.length > 0) {
+      data.productos.forEach((p) => {
+        const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
+        if (montoInst > 0) {
+          tarifaInstalacion += montoInst;
+        } else {
+          const nombre = (p.nombre || p.titulo || '').toLowerCase().trim();
+          if (mapaProductos[nombre]) {
+            tarifaInstalacion += mapaProductos[nombre];
+          }
+        }
       });
+      if (tarifaInstalacion > 0) return tarifaInstalacion;
+    }
+
+    const textoDetalle = String(data.detalles || data.vehiculo || data.producto || '').toLowerCase();
+    Object.keys(mapaProductos).forEach((nombreProd) => {
+      if (textoDetalle.includes(nombreProd) && mapaProductos[nombreProd] > 0) {
+        tarifaInstalacion += mapaProductos[nombreProd];
+      }
     });
 
-    setCitasList(listaFinal);
+    return tarifaInstalacion;
+  };
+
+  const obtenerCitasCompletadas = async (mapaProductos) => {
+    try {
+      const snapPedidos = await getDocs(collection(db, 'pedidos'));
+      let lista = [];
+
+      snapPedidos.forEach((docSnap) => {
+        const data = docSnap.data();
+        const estado = data.estadoCita || data.estado;
+
+        if (estado === 'Completada' || estado === 'Completado') {
+          const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
+          const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
+          let montoComision = Number(data.montoComision) || 0;
+
+          lista.push({
+            id: docSnap.id,
+            clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
+            vehiculo: data.vehiculo || data.detalles || (Array.isArray(data.productos) ? data.productos.map(p => p.nombre || p.titulo).join(', ') : 'Servicio de Instalación'),
+            tecnicoId: data.tecnicoId || '',
+            tecnicoNombre: data.tecnicoNombre || 'Sin Asignar',
+            precioInstalacion: precioInstalacion,
+            porcentajeComision: porcentajeComision,
+            montoComision: montoComision,
+            estadoPagoTecnico: data.estadoPagoTecnico || 'pendiente',
+            fecha: data.fechaInstalacion || data.fechaCita || new Date().toLocaleDateString(),
+            ...data
+          });
+        }
+      });
+
+      setCitasCompletadas(lista);
+    } catch (error) {
+      console.error("Error al obtener instalaciones:", error);
+    }
   };
 
   const cambiarEstadoPago = async (id, estadoActual) => {
     const nuevoEstado = estadoActual === 'pagado' ? 'pendiente' : 'pagado';
     try {
-      await updateDoc(doc(db, 'pedidos', id), { estadoPagoTecnico: nuevoEstado });
-      setCitasList(prev => prev.map(c => c.id === id ? { ...c, estadoPagoTecnico: nuevoEstado } : c));
-    } catch (err) {
-      alert("Error al actualizar el estado de pago.");
+      const refDoc = doc(db, 'pedidos', id);
+      await updateDoc(refDoc, { estadoPagoTecnico: nuevoEstado });
+
+      setCitasCompletadas((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, estadoPagoTecnico: nuevoEstado } : c))
+      );
+    } catch (error) {
+      console.error("Error al actualizar estado de pago:", error);
+      alert("Error al guardar el estado de pago.");
     }
   };
 
-  // Filtrado de la vista
-  const citasFiltradas = citasList.filter((item) => {
-    if (tecnicoFiltro !== 'todos' && item.tecnicoId !== tecnicoFiltro) return false;
-    if (filtroPago === 'pendiente' && item.estadoPagoTecnico !== 'pendiente') return false;
-    if (filtroPago === 'pagado' && item.estadoPagoTecnico !== 'pagado') return false;
-    
-    const esComp = item.estadoCita === 'completada' || item.estadoCita === 'completado';
-    if (filtroEstadoCita === 'completada' && !esComp) return false;
-    if (filtroEstadoCita === 'pendiente' && esComp) return false;
+  const citasProcesadas = citasCompletadas.map((item) => {
+    const tecObj = tecnicos.find((t) => t.id === item.tecnicoId);
+    const porcentaje = item.porcentajeComision > 0 
+      ? item.porcentajeComision 
+      : (tecObj ? Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 20) : 0);
 
+    const comisionCalculada = (item.precioInstalacion * porcentaje) / 100;
+
+    return {
+      ...item,
+      porcentajeComision: porcentaje,
+      montoComision: item.montoComision > 0 ? item.montoComision : comisionCalculada
+    };
+  });
+
+  const citasFiltradas = citasProcesadas.filter((c) => {
+    if (tecnicoFiltro !== 'todos' && c.tecnicoId !== tecnicoFiltro) return false;
+    if (filtroPago === 'pendiente' && c.estadoPagoTecnico !== 'pendiente') return false;
+    if (filtroPago === 'pagado' && c.estadoPagoTecnico !== 'pagado') return false;
     return true;
   });
 
-  // Totales
-  const totalCostoInstalacion = citasFiltradas.reduce((acc, c) => acc + c.costoInstalacion, 0);
-  const totalComisiones = citasFiltradas.reduce((acc, c) => acc + c.montoComision, 0);
+  const totalInstalaciones = citasFiltradas.reduce((acc, curr) => acc + (curr.precioInstalacion || 0), 0);
+  const totalComisiones = citasFiltradas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
 
-  const tecObjSeleccionado = tecnicos.find(t => t.id === tecnicoFiltro);
-  const nombreTecnicoActivo = tecObjSeleccionado ? tecObjSeleccionado.nombre : 'Todos los Técnicos';
+  // Filtro exclusivo para el Recibo de Pago (Solo lo pagado)
+  const citasSoloPagadas = citasFiltradas.filter((c) => c.estadoPagoTecnico === 'pagado');
+  const totalComisionesPagadas = citasSoloPagadas.reduce((acc, curr) => acc + (curr.montoComision || 0), 0);
+
+  const tecSeleccionadoNombre = tecnicos.find((t) => t.id === tecnicoFiltro)?.nombre || (citasSoloPagadas[0]?.tecnicoNombre || 'Técnico General');
 
   return (
-    <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '25px', fontFamily: 'sans-serif' }}>
+    <div style={{ backgroundColor: '#0D0D0D', color: '#FFF', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif' }}>
       
+      {/* Estilos específicos para formatear el Recibo de Pago en impresión */}
       <style jsx global>{`
         @media print {
           body { background-color: #FFF !important; color: #000 !important; }
-          .no-print { display: none !important; }
-          .area-recibo {
-            background-color: #FFF !important;
-            color: #000 !important;
-            border: 2px solid #000 !important;
-            padding: 25px !important;
+          header, nav, button, select, .no-print { display: none !important; }
+          .area-recibo { 
+            color: #000 !important; 
+            background-color: #FFF !important; 
+            border: 2px solid #000 !important; 
             box-shadow: none !important;
             width: 100% !important;
+            max-width: 100% !important;
+            padding: 20px !important;
           }
-          .area-recibo table { width: 100% !important; border-collapse: collapse !important; color: #000 !important; }
-          .area-recibo th, .area-recibo td { border: 1px solid #000 !important; padding: 8px !important; color: #000 !important; }
-          .area-recibo th { background-color: #F0F0F0 !important; }
-          .texto-impresion { color: #000 !important; }
+          .area-recibo table { width: 100% !important; color: #000 !important; border-collapse: collapse !important; }
+          .area-recibo th { background-color: #F0F0F0 !important; color: #000 !important; border: 1px solid #000 !important; }
+          .area-recibo td { border: 1px solid #000 !important; color: #000 !important; }
+          .area-recibo .resumen-box { border: 1px solid #000 !important; background-color: #FFF !important; color: #000 !important; }
+          .area-recibo .texto-impresion { color: #000 !important; }
         }
       `}</style>
 
-      {/* HEADER */}
-      <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Control de Comisiones de Técnicos</h1>
-          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Cálculo automático sobre el valor del servicio</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+      {/* HEADER DE NAVEGACIÓN */}
+      <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Link href="/admin/citas">
-            <button style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              Volver a Citas
+            <button style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+              ← Volver a Citas
             </button>
           </Link>
-          <Link href="/admin/dashboard">
-            <button style={{ backgroundColor: '#141414', color: '#FFF', border: '1px solid #333', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}>
-              Panel
-            </button>
-          </Link>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>👷‍♂️ Reporte & Pago de Comisiones</h2>
         </div>
+
+        <Link href="/admin/dashboard">
+          <button style={{ backgroundColor: '#141414', border: '1px solid #333', color: '#FFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+            Volver al Panel
+          </button>
+        </Link>
       </header>
 
-      {/* FILTROS */}
-      <div className="no-print" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '25px', backgroundColor: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Técnico:</label>
-          <select 
-            value={tecnicoFiltro} 
-            onChange={(e) => setTecnicoFiltro(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
-          >
-            <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
-            {tecnicos.map((t) => (
-              <option key={t.id} value={t.id}>{t.nombre}</option>
-            ))}
-          </select>
-        </div>
+      {/* BARRA DE CONTROLES */}
+      <div className="no-print" style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <select 
+          value={tecnicoFiltro} 
+          onChange={(e) => setTecnicoFiltro(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', outline: 'none', cursor: 'pointer' }}
+        >
+          <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
+          {tecnicos.map((tec) => (
+            <option key={tec.id} value={tec.id}>
+              {tec.nombre} ({tec.porcentajeDefecto || tec.porcentaje || 20}%)
+            </option>
+          ))}
+        </select>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Cita:</label>
-          <select 
-            value={filtroEstadoCita} 
-            onChange={(e) => setFiltroEstadoCita(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
-          >
-            <option value="todos">Todas las Citas</option>
-            <option value="completada">Solo Completadas</option>
-            <option value="pendiente">Solo Pendientes</option>
-          </select>
-        </div>
+        <select 
+          value={filtroPago} 
+          onChange={(e) => setFiltroPago(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFB800', border: '1px solid #FFB800', outline: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          <option value="todos">Todos los Estados (Pendientes y Pagados)</option>
+          <option value="pendiente">🔴 Solo Pendientes de Pago</option>
+          <option value="pagado">🟢 Solo Pagados</option>
+        </select>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Pago:</label>
-          <select 
-            value={filtroPago} 
-            onChange={(e) => setFiltroPago(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#25D366', border: '1px solid #25D366', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            <option value="todos">Todos los Estados de Pago</option>
-            <option value="pendiente">Solo Pendientes de Pago</option>
-            <option value="pagado">Solo Pagados</option>
-          </select>
-        </div>
+        <button 
+          onClick={() => setModoRecibo(!modoRecibo)}
+          style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          {modoRecibo ? '📋 Volver a Tabla General' : '🧾 Ver Recibo de Pago'}
+        </button>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-          <button 
-            onClick={() => setModoRecibo(!modoRecibo)}
-            style={{ backgroundColor: modoRecibo ? '#333' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            {modoRecibo ? ' Ver Tabla' : ' Ver Recibo de Pago'}
-          </button>
-          <button 
-            onClick={() => window.print()}
-            style={{ backgroundColor: '#E50914', color: '#FFF', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            Imprimir Comprobante
-          </button>
-        </div>
+        <button 
+          onClick={() => window.print()}
+          style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          🖨️ Imprimir Recibo
+        </button>
       </div>
 
+      {/* VISTA 1: RECIBO DE PAGO OFICIAL PARA IMPRIMIR */}
       {modoRecibo ? (
-        /* VISTA DE RECIBO DE PAGO */
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
+          
+          {/* Encabezado Comprobante */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }} className="texto-impresion">GR AUTO ADORNOS</h1>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#AAA' }} className="texto-impresion">Comprobante de Pago a Técnicos</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#AAA' }} className="texto-impresion">Servicios de Instalación & Accesorios Automotrices</p>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>RECIBO DE COMISIONES</h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha: {new Date().toLocaleDateString()}</p>
+              <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>COMPROBANTE DE PAGO</h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha: {new Date().toLocaleDateString()}</p>
             </div>
           </div>
 
-          <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333' }}>
+          {/* Información del Técnico */}
+          <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333' }} className="resumen-box">
             <p style={{ margin: 0, fontSize: '14px' }} className="texto-impresion">
-              Técnico / Instalador: <strong>{nombreTecnicoActivo}</strong>
+              Técnico / Instalador: <strong>{tecSeleccionadoNombre}</strong>
             </p>
           </div>
 
+          <p style={{ fontSize: '13px', color: '#CCC', marginBottom: '12px' }} className="texto-impresion">
+            Detalle de instalaciones y servicios <strong>PAGADOS Y LIQUIDADOS</strong>:
+          </p>
+
+          {/* Tabla Desglose de Pago */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '25px' }}>
             <thead>
               <tr style={{ backgroundColor: '#222', color: '#FFF', textAlign: 'left' }}>
                 <th style={{ padding: '10px', fontSize: '12px' }}>Fecha</th>
-                <th style={{ padding: '10px', fontSize: '12px' }}>Cliente / Trabajo</th>
-                <th style={{ padding: '10px', fontSize: '12px' }}>Costo Instalación</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Cliente / Trabajo Realizado</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Precio Instalación</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>% Com.</th>
-                <th style={{ padding: '10px', fontSize: '12px' }}>Comisión a Pagar</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Comisión Pagada</th>
               </tr>
             </thead>
             <tbody>
-              {citasFiltradas.map((item) => (
+              {citasSoloPagadas.map((item) => (
                 <tr key={item.id} style={{ borderBottom: '1px solid #333', fontSize: '13px' }}>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.fecha}</td>
-                  <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculoServicio}</td>
-                  <td style={{ padding: '10px' }} className="texto-impresion">RD$ {item.costoInstalacion.toLocaleString()}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculo}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">RD$ {(item.precioInstalacion || 0).toLocaleString()}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.porcentajeComision}%</td>
                   <td style={{ padding: '10px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">
-                    RD$ {item.montoComision.toLocaleString()}
+                    RD$ {(item.montoComision || 0).toLocaleString()}
                   </td>
                 </tr>
               ))}
+              {citasSoloPagadas.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                    No hay trabajos marcados como "PAGADO" para este técnico.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL A ENTREGAR:</span>
-            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisiones.toLocaleString()}</span>
+          {/* Total Liquidado */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }} className="resumen-box">
+            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO / LIQUIDADO:</span>
+            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisionesPagadas.toLocaleString()}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', padding: '0 30px' }}>
+          {/* Firmas de Conformidad */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '70px', padding: '0 30px' }}>
             <div style={{ width: '220px', borderTop: '1px solid #888', paddingTop: '8px', textAlign: 'center' }}>
               <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Firma del Técnico</p>
-              <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#888' }} className="texto-impresion">{nombreTecnicoActivo}</p>
+              <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#888' }} className="texto-impresion">{tecSeleccionadoNombre}</p>
             </div>
             <div style={{ width: '220px', borderTop: '1px solid #888', paddingTop: '8px', textAlign: 'center' }}>
-              <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Administración</p>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Recibido Conforme Admin</p>
               <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#888' }} className="texto-impresion">GR Auto Adornos</p>
             </div>
           </div>
+
         </div>
       ) : (
-        /* VISTA DE TABLA PRINCIPAL */
+
+        /* VISTA 2: TABLA PRINCIPAL DE GESTIÓN DE COMISIONES */
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
-            <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas Evaluadas</p>
-              <h3 style={{ margin: '5px 0 0 0', color: '#FFF', fontSize: '22px' }}>{citasFiltradas.length}</h3>
+            <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Trabajos Registrados</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#FFF' }}>{citasFiltradas.length}</h3>
             </div>
 
-            <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Costo Instalación</p>
-              <h3 style={{ margin: '5px 0 0 0', color: '#25D366', fontSize: '22px' }}>RD$ {totalCostoInstalacion.toLocaleString()}</h3>
+            <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Total Precio Instalación</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#25D366' }}>RD$ {totalInstalaciones.toLocaleString()}</h3>
             </div>
 
-            <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #E50914' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Comisiones Calculadas</p>
-              <h3 style={{ margin: '5px 0 0 0', color: '#E50914', fontSize: '22px' }}>RD$ {totalComisiones.toLocaleString()}</h3>
+            <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #E50914' }}>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Total Comisiones Calculadas</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#E50914' }}>RD$ {totalComisiones.toLocaleString()}</h3>
             </div>
           </div>
 
           {loading ? (
-            <p style={{ color: '#888', textAlign: 'center', padding: '40px' }}>Cargando información...</p>
+            <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Cargando catálogo y comisiones...</p>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ backgroundColor: '#1A1A1A', color: '#FFF', borderBottom: '2px solid #333' }}>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Fecha</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Cliente / Trabajo</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Técnico</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Estado Cita</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Costo Instalación</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>% Com.</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }}>Comisión</th>
-                  <th style={{ padding: '12px', fontSize: '13px' }} className="no-print">Pago Técnico</th>
+                <tr style={{ backgroundColor: '#222', color: '#FFF', borderBottom: '2px solid #444' }}>
+                  <th style={{ padding: '10px' }}>Cliente / Vehículo</th>
+                  <th style={{ padding: '10px' }}>Técnico</th>
+                  <th style={{ padding: '10px' }}>Precio Instalación</th>
+                  <th style={{ padding: '10px' }}>% Com.</th>
+                  <th style={{ padding: '10px' }}>Comisión a Pagar</th>
+                  <th style={{ padding: '10px' }} className="no-print">Estado de Pago</th>
                 </tr>
               </thead>
               <tbody>
                 {citasFiltradas.map((item) => {
-                  const esCompletada = item.estadoCita === 'completada' || item.estadoCita === 'completado';
                   const estaPagado = item.estadoPagoTecnico === 'pagado';
 
                   return (
-                    <tr key={item.id} style={{ borderBottom: '1px solid #222' }}>
-                      <td style={{ padding: '12px', fontSize: '13px', color: '#AAA' }}>{item.fecha}</td>
-                      <td style={{ padding: '12px', fontSize: '13px' }}>
-                        <strong>{item.clienteNombre}</strong>
-                        <br />
-                        <span style={{ fontSize: '11px', color: '#888' }}>{item.vehiculoServicio}</span>
+                    <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
+                      <td style={{ padding: '10px' }}>{item.clienteNombre} - {item.vehiculo}</td>
+                      <td style={{ padding: '10px' }}>{item.tecnicoNombre}</td>
+                      <td style={{ padding: '10px', color: '#25D366', fontWeight: 'bold' }}>
+                        RD$ {(item.precioInstalacion || 0).toLocaleString()}
                       </td>
-                      <td style={{ padding: '12px', fontSize: '13px' }}>{item.tecnicoNombre}</td>
-                      
-                      <td style={{ padding: '12px', fontSize: '12px', fontWeight: 'bold' }}>
-                        <span style={{
-                          backgroundColor: esCompletada ? '#1C3829' : '#381C1C',
-                          color: esCompletada ? '#25D366' : '#FF4D4D',
-                          border: esCompletada ? '1px solid #25D366' : '1px solid #FF4D4D',
-                          padding: '4px 8px',
-                          borderRadius: '12px',
-                          fontSize: '10px',
-                          textTransform: 'uppercase'
-                        }}>
-                          {esCompletada ? 'COMPLETADA' : 'PENDIENTE'}
-                        </span>
+                      <td style={{ padding: '10px' }}>{item.porcentajeComision || 0}%</td>
+                      <td style={{ padding: '10px', fontWeight: 'bold', color: '#E50914' }}>
+                        RD$ {(item.montoComision || 0).toLocaleString()}
                       </td>
-
-                      <td style={{ padding: '12px', fontSize: '13px', color: '#25D366', fontWeight: 'bold' }}>
-                        RD$ {item.costoInstalacion.toLocaleString()}
-                      </td>
-                      <td style={{ padding: '12px', fontSize: '13px' }}>{item.porcentajeComision}%</td>
-                      <td style={{ padding: '12px', fontSize: '13px', fontWeight: 'bold', color: '#E50914' }}>
-                        RD$ {item.montoComision.toLocaleString()}
-                      </td>
-                      <td style={{ padding: '12px' }} className="no-print">
+                      <td style={{ padding: '10px' }} className="no-print">
                         <button
                           onClick={() => cambiarEstadoPago(item.id, item.estadoPagoTecnico)}
                           style={{
-                            backgroundColor: estaPagado ? '#1C3829' : '#222',
-                            color: estaPagado ? '#25D366' : '#AAA',
-                            border: estaPagado ? '1px solid #25D366' : '1px solid #444',
+                            backgroundColor: estaPagado ? '#1C3829' : '#381C1C',
+                            color: estaPagado ? '#25D366' : '#FF4D4D',
+                            border: estaPagado ? '1px solid #25D366' : '1px solid #FF4D4D',
                             padding: '6px 12px',
                             borderRadius: '20px',
                             fontSize: '11px',
@@ -407,7 +388,7 @@ export default function ReporteComisionesTecnicos() {
                             cursor: 'pointer'
                           }}
                         >
-                          {estaPagado ? 'PAGADO' : 'PENDIENTE'}
+                          {estaPagado ? '✅ PAGADO' : '🔴 PENDIENTE'}
                         </button>
                       </td>
                     </tr>
@@ -415,8 +396,8 @@ export default function ReporteComisionesTecnicos() {
                 })}
                 {citasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No se encontraron registros activos en la base de datos.
+                    <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                      No hay registros para este filtro.
                     </td>
                   </tr>
                 )}
