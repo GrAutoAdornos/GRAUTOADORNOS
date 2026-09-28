@@ -12,6 +12,10 @@ export default function HistorialPedidos() {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [productosInventario, setProductosInventario] = useState([]);
   
+  // Vendedores registrados
+  const [listaVendedores, setListaVendedores] = useState([]);
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('');
+
   // Selección de Tipo de Cliente (Nuevo vs Existente)
   const [tipoCliente, setTipoCliente] = useState('nuevo');
   const [listaClientesCRM, setListaClientesCRM] = useState([]);
@@ -48,6 +52,7 @@ export default function HistorialPedidos() {
   useEffect(() => {
     cargarPedidos();
     cargarInventario();
+    cargarVendedores();
   }, []);
 
   // Validación de día SÁBADO
@@ -55,6 +60,16 @@ export default function HistorialPedidos() {
     if (!fechaString) return false;
     const fecha = new Date(`${fechaString}T00:00:00`);
     return fecha.getDay() === 6;
+  };
+
+  const cargarVendedores = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'vendedores'));
+      const lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setListaVendedores(lista);
+    } catch (error) {
+      console.error("Error al cargar vendedores:", error);
+    }
   };
 
   const cargarPedidos = async () => {
@@ -222,6 +237,11 @@ export default function HistorialPedidos() {
       const orderId = Math.floor(100000 + Math.random() * 900000).toString();
       const detallesTexto = itemsSeleccionados.map(i => `${i.cantidadSeleccionada}x ${i.nombre || i.titulo}`).join(', ');
 
+      // Obtener datos del vendedor asignado
+      const vendedorObj = listaVendedores.find(v => v.id === vendedorSeleccionado);
+      const porcentajeComision = vendedorObj ? Number(vendedorObj.porcentajeDefecto || 5) : 0;
+      const montoComision = (subtotalProductos * porcentajeComision) / 100;
+
       await runTransaction(db, async (transaction) => {
         for (const item of itemsSeleccionados) {
           const prodRef = doc(db, 'productos', item.id);
@@ -242,6 +262,7 @@ export default function HistorialPedidos() {
           direccion: direccionCliente || zonaSeleccionada.nombre,
           zonaEnvio: zonaSeleccionada.nombre,
           costoEnvio: costoEnvio,
+          subtotalProductos: subtotalProductos,
           detalles: detallesTexto,
           total: totalGeneral,
           metodoPago: metodoPago,
@@ -249,7 +270,14 @@ export default function HistorialPedidos() {
           fidelizacionContactado: false,
           fecha: new Date(),
           origen: 'Manual (WhatsApp/Llamada)',
-          requiereInstalacion: requiereInstalacion
+          requiereInstalacion: requiereInstalacion,
+          
+          // Comisión asignada al Vendedor (calculada solo del subtotal de productos)
+          vendedorId: vendedorObj ? vendedorObj.id : null,
+          vendedorNombre: vendedorObj ? vendedorObj.nombre : 'Sin Asignar',
+          vendedorPorcentaje: porcentajeComision,
+          porcentajeComisionVendedor: porcentajeComision,
+          montoComisionVendedor: montoComision
         };
 
         if (requiereInstalacion) {
@@ -275,6 +303,7 @@ export default function HistorialPedidos() {
       setRequiereInstalacion(false);
       setFechaCita('');
       setHoraCita('');
+      setVendedorSeleccionado('');
       cargarPedidos();
       cargarInventario();
     } catch (error) {
@@ -290,7 +319,7 @@ export default function HistorialPedidos() {
     return p.estado === filtroEstado;
   });
 
-  // 📊 CÁLCULO DE CONTADORES
+  //  CÁLCULO DE CONTADORES
   const totalPendientes = pedidos.filter((p) => p.estado === 'Pendiente').length;
   const totalCompletados = pedidos.filter((p) => p.estado === 'Completado' || p.estado === 'Completada').length;
   const totalCancelados = pedidos.filter((p) => p.estado === 'Cancelado' || p.estado === 'Cancelada').length;
@@ -307,14 +336,14 @@ export default function HistorialPedidos() {
             onClick={() => setMostrarModal(true)}
             style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-            ➕ Nuevo Pedido Manual
+             Nuevo Pedido Manual
           </button>
-              <button
-  onClick={() => window.print()}
-  style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
->
-  📄 Exportar Reporte de Ventas (PDF)
-</button>
+          <button
+            onClick={() => window.print()}
+            style={{ backgroundColor: '#E50914', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+             Exportar Reporte de Ventas (PDF)
+          </button>
           <button onClick={() => window.location.href = '/admin/dashboard'} style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
             Volver al Panel
           </button>
@@ -323,7 +352,7 @@ export default function HistorialPedidos() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         
-        {/* 📊 BLOQUE DE TARJETAS CON CONTADORES DE ESTADO */}
+        {/* BLOQUE DE TARJETAS CON CONTADORES DE ESTADO */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '25px' }}>
           <div style={{ backgroundColor: '#141414', border: '1px solid #FFB800', borderRadius: '10px', padding: '15px', textAlign: 'center' }}>
             <span style={{ fontSize: '12px', color: '#AAA', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Pendientes</span>
@@ -372,6 +401,11 @@ export default function HistorialPedidos() {
                     <span style={{ backgroundColor: '#222', color: '#888', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #333' }}>
                       {pedido.origen || 'Web'}
                     </span>
+                    {pedido.vendedorNombre && pedido.vendedorNombre !== 'Sin Asignar' && (
+                      <span style={{ backgroundColor: '#1B2A4A', color: '#60A5FA', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #2563EB' }}>
+                        👤 Vendedor: {pedido.vendedorNombre}
+                      </span>
+                    )}
                     {(pedido.fechaCita || pedido.fechaInstalacion) && (
                       <span style={{ backgroundColor: '#382D1C', color: '#FFB800', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #FFB800', fontWeight: 'bold' }}>
                          Cita: {pedido.fechaCita || pedido.fechaInstalacion} ({pedido.horaCita || pedido.horaInstalacion})
@@ -456,11 +490,33 @@ export default function HistorialPedidos() {
                 <img src="/LOGO NEGRO.jpeg" alt="Logo" style={{ width: '35px', height: '35px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
                 <h3 style={{ margin: 0, color: '#E50914', fontSize: '18px' }}>Registrar Pedido Manual</h3>
               </div>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', color: '#888', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
             </div>
 
             <form onSubmit={handleCrearPedidoManual} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               
+              {/* ASIGNACIÓN DE VENDEDOR */}
+              <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #2563EB' }}>
+                <label style={{ fontSize: '12px', color: '#60A5FA', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+                  💼 Asignar Vendedor (Para Comisión de Venta):
+                </label>
+                <select
+                  value={vendedorSeleccionado}
+                  onChange={(e) => setVendedorSeleccionado(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#0D0D0D', border: '1px solid #2563EB', color: '#FFF', padding: '10px', borderRadius: '6px', fontSize: '13px', outline: 'none' }}
+                >
+                  <option value="">-- Sin Vendedor Asignado --</option>
+                  {listaVendedores.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.nombre} ({v.porcentajeDefecto || 5}% comisión)
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', color: '#AAA', marginTop: '4px', display: 'block' }}>
+                  * La comisión se calculará únicamente del monto de los productos (excluyendo envío o instalación).
+                </span>
+              </div>
+
               {/* SELECTOR DE CLIENTE NUEVO VS EXISTENTE */}
               <div style={{ backgroundColor: '#1A1A1A', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
                 <label style={{ fontSize: '12px', color: '#FFB800', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>
@@ -681,14 +737,24 @@ export default function HistorialPedidos() {
 
                   <div style={{ borderTop: '1px solid #333', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA', fontSize: '12px' }}>
-                      <span>Subtotal Productos:</span>
-                      <span>RD$ {subtotalProductos.toLocaleString()}</span>
+                      <span>Subtotal Productos (Monto para Comisión):</span>
+                      <span style={{ fontWeight: 'bold', color: '#FFF' }}>RD$ {subtotalProductos.toLocaleString()}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#AAA', fontSize: '12px' }}>
                       <span>Envío ({zonaSeleccionada.nombre}):</span>
                       <span>RD$ {costoEnvio.toLocaleString()}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#25D366', fontSize: '15px', marginTop: '4px' }}>
+
+                    {vendedorSeleccionado && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60A5FA', fontSize: '12px', marginTop: '4px' }}>
+                        <span>Comisión Est. Vendedor:</span>
+                        <span>
+                          RD$ {((subtotalProductos * Number(listaVendedores.find(v => v.id === vendedorSeleccionado)?.porcentajeDefecto || 5)) / 100).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#25D366', fontSize: '15px', marginTop: '6px' }}>
                       <span>TOTAL A PAGAR:</span>
                       <span>RD$ {totalGeneral.toLocaleString()}</span>
                     </div>
