@@ -16,10 +16,12 @@ export default function ComisionesVendedores() {
 
   const cargarDatos = async () => {
     try {
+      // Cargar Vendedores
       const snapVendedores = await getDocs(collection(db, 'vendedores'));
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
 
+      // Cargar Órdenes
       const snapOrdenes = await getDocs(collection(db, 'ordenes'));
       const listaOrdenes = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
       setOrdenes(listaOrdenes);
@@ -28,41 +30,58 @@ export default function ComisionesVendedores() {
     }
   };
 
-  // Helper para obtener el subtotal/monto del pedido
+  // Helper para obtener el nombre del vendedor de una orden
+  const obtenerNombreVendedor = (orden) => {
+    if (orden.vendedorNombre) return orden.vendedorNombre;
+    if (typeof orden.vendedor === 'string') return orden.vendedor;
+    if (typeof orden.vendedor === 'object' && orden.vendedor?.nombre) return orden.vendedor.nombre;
+    // Si solo hay ID, buscarlo en la lista de vendedores
+    if (orden.vendedorId) {
+      const vEncontrado = vendedores.find(v => v.id === orden.vendedorId);
+      if (vEncontrado) return vEncontrado.nombre;
+    }
+    return null;
+  };
+
+  // Helper para obtener la base de la comisión (productos)
   const obtenerMontoBase = (orden) => {
     if (orden.subtotalProductos !== undefined && Number(orden.subtotalProductos) > 0) {
       return Number(orden.subtotalProductos);
     }
     if (Array.isArray(orden.items) && orden.items.length > 0) {
-      return orden.items.reduce((sum, item) => sum + (Number(item.precio || item.price || 0) * (item.cantidad || item.quantity || 1)), 0);
+      return orden.items.reduce((sum, item) => {
+        const precio = Number(item.precio || item.price || 0);
+        const cant = Number(item.cantidad || item.quantity || 1);
+        return sum + (precio * cant);
+      }, 0);
     }
     return Number(orden.total) || 0;
   };
 
-  // Helper para parsear fechas de Firebase/Strings
-  const parsearFecha = (orden) => {
-    const f = orden.fecha || orden.createdAt || orden.fechaCreacion;
-    if (!f) return null;
-    if (f.seconds) return new Date(f.seconds * 1000); // Timestamp de Firestore
-    return new Date(f);
-  };
-
-  // Filtrar órdenes por vendedor
+  // Filtrado de órdenes
   const ordenesFiltradas = ordenes.filter(orden => {
-    // Verificar si la orden tiene vendedor asignado (ID o Nombre)
-    const tieneVendedor = orden.vendedorId || orden.vendedor || orden.vendedorNombre;
-    if (!tieneVendedor) return false;
+    const nombreVendedor = obtenerNombreVendedor(orden);
+    
+    // Si la orden no tiene ningún dato de vendedor, la ignoramos
+    if (!nombreVendedor && !orden.vendedorId) return false;
 
-    // Filtro selector vendedor
+    // Filtro selector
     if (vendedorSeleccionado !== 'todos') {
+      const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
+      const nombreSeleccionado = vObj ? vObj.nombre : '';
+
       const coincideId = orden.vendedorId === vendedorSeleccionado;
-      const coincideNombre = (orden.vendedor || orden.vendedorNombre) === vendedorSeleccionado;
+      const coincideNombre = nombreVendedor && nombreSeleccionado && 
+        nombreVendedor.trim().toLowerCase() === nombreSeleccionado.trim().toLowerCase();
+
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // Filtro por fecha
-    const fechaOrden = parsearFecha(orden);
-    if (fechaOrden) {
+    // Filtro por Fecha
+    const fechaRaw = orden.fecha || orden.createdAt || orden.fechaCreacion;
+    if (fechaRaw) {
+      const fechaOrden = fechaRaw.seconds ? new Date(fechaRaw.seconds * 1000) : new Date(fechaRaw);
+      
       if (fechaInicio) {
         const inicio = new Date(fechaInicio);
         inicio.setHours(0, 0, 0, 0);
@@ -78,7 +97,7 @@ export default function ComisionesVendedores() {
     return true;
   });
 
-  // Calcular totales acumulados
+  // Totales
   const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerMontoBase(o), 0);
   
   const totalComisiones = ordenesFiltradas.reduce((sum, o) => {
@@ -160,7 +179,7 @@ export default function ComisionesVendedores() {
         </div>
       </div>
 
-      {/* TABLA DE DETALLES DE VENTAS */}
+      {/* TABLA DE DETALLES */}
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ backgroundColor: '#222', color: '#FFF' }}>
@@ -180,14 +199,14 @@ export default function ComisionesVendedores() {
               ? Number(orden.montoComisionVendedor) 
               : (baseMonto * (pct / 100));
 
-            const nombreVendedor = orden.vendedorNombre || orden.vendedor || 'N/A';
-            const nombreCliente = orden.clienteNombre || orden.nombreCliente || orden.cliente || 'Cliente General';
+            const nombreV = obtenerNombreVendedor(orden) || 'N/A';
+            const nombreC = orden.clienteNombre || orden.nombreCliente || orden.cliente || 'Cliente General';
 
             return (
               <tr key={orden.id} style={{ borderBottom: '1px solid #333' }}>
                 <td style={{ padding: '10px' }}>#{orden.id.slice(-6)}</td>
-                <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreVendedor}</td>
-                <td style={{ padding: '10px', color: '#AAA' }}>{nombreCliente}</td>
+                <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreV}</td>
+                <td style={{ padding: '10px', color: '#AAA' }}>{nombreC}</td>
                 <td style={{ padding: '10px' }}>RD$ {baseMonto.toLocaleString()}</td>
                 <td style={{ padding: '10px' }}>{pct}%</td>
                 <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
