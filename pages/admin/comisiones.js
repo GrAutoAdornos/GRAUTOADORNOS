@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '../../lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export default function ReporteComisiones() {
@@ -82,31 +82,35 @@ export default function ReporteComisiones() {
 
   const obtenerCitasCompletadas = async (mapaProductos) => {
     try {
+      // Cargar tanto de 'pedidos' como de 'citas' para evitar pérdida de registros
       const snapPedidos = await getDocs(collection(db, 'pedidos'));
+      const snapCitas = await getDocs(collection(db, 'citas'));
+
+      const docsPedidos = snapPedidos.docs.map(d => ({ id: d.id, _coleccion: 'pedidos', ...d.data() }));
+      const docsCitas = snapCitas.docs.map(d => ({ id: d.id, _coleccion: 'citas', ...d.data() }));
+
+      // Mapa para evitar duplicados si existe el mismo ID en ambas colecciones
+      const mapaDocs = new Map();
+      [...docsPedidos, ...docsCitas].forEach(docItem => mapaDocs.set(docItem.id, docItem));
+
       let lista = [];
 
-      snapPedidos.forEach((docSnap) => {
-        const data = docSnap.data();
-        
-        // 1. Validar el estado del trabajo/cita
-        const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
-        const citaFinalizada = ['completada', 'completado', 'entregado', 'finalizado'].includes(estadoCita);
+      mapaDocs.forEach((data) => {
+        // Normalización y comprobación de estado completado/finalizado
+        const estadoCita = String(data.estadoCita || data.estado || data.status || '').toLowerCase().trim();
+        const estadosValidos = ['completada', 'completado', 'finalizada', 'finalizado', 'entregado', 'entregada'];
 
-        // 2. Validar el estado del pedido/pago del cliente
-        const estadoPedido = String(data.estadoPedido || data.estadoGeneral || data.status || '').toLowerCase().trim();
-        const estadoPagoCliente = String(data.estadoPago || data.pagoEstado || '').toLowerCase().trim();
+        const estaCompletada = estadosValidos.includes(estadoCita);
 
-        const pedidoCompletado = ['completado', 'completada', 'entregado', 'finalizado'].includes(estadoPedido);
-        const pagoClienteConfirmado = ['pagado', 'pagada', 'completado', 'confirmado'].includes(estadoPagoCliente);
-
-        // SOLO SE MUESTRA SI LA CITA/TRABAJO ESTÁ LISTA Y EL PEDIDO/PAGO DEL CLIENTE ESTÁ COMPLETADO O PAGADO
-        if (citaFinalizada && (pedidoCompletado || pagoClienteConfirmado)) {
+        // Si la cita NO está completada, NO aparece en comisiones
+        if (estaCompletada) {
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
 
           lista.push({
-            id: docSnap.id,
+            id: data.id,
+            _coleccion: data._coleccion || 'pedidos',
             clienteNombre: data.cliente || data.nombre || data.clienteNombre || 'Cliente General',
             vehiculo: data.vehiculo || data.detalles || (Array.isArray(data.productos) ? data.productos.map(p => p.nombre || p.titulo).join(', ') : 'Servicio de Instalación'),
             tecnicoId: data.tecnicoId || '',
@@ -114,8 +118,8 @@ export default function ReporteComisiones() {
             precioInstalacion: precioInstalacion,
             porcentajeComision: porcentajeComision,
             montoComision: montoComision,
-            estadoPagoTecnico: data.estadoPagoTecnico || 'pendiente',
-            fecha: data.fechaInstalacion || data.fechaCita || new Date().toLocaleDateString(),
+            estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
+            fecha: data.fechaInstalacion || data.fechaCita || data.fecha || new Date().toLocaleDateString(),
             ...data
           });
         }
@@ -127,14 +131,16 @@ export default function ReporteComisiones() {
     }
   };
 
-  const cambiarEstadoPago = async (id, estadoActual) => {
-    const nuevoEstado = estadoActual === 'pagado' ? 'pendiente' : 'pagado';
+  const cambiarEstadoPago = async (item) => {
+    const nuevoEstado = item.estadoPagoTecnico === 'pagado' ? 'pendiente' : 'pagado';
     try {
-      const refDoc = doc(db, 'pedidos', id);
+      const coleccionTarget = item._coleccion || 'pedidos';
+      const refDoc = doc(db, coleccionTarget, item.id);
+      
       await updateDoc(refDoc, { estadoPagoTecnico: nuevoEstado });
 
       setCitasCompletadas((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, estadoPagoTecnico: nuevoEstado } : c))
+        prev.map((c) => (c.id === item.id ? { ...c, estadoPagoTecnico: nuevoEstado } : c))
       );
     } catch (error) {
       console.error("Error al actualizar estado de pago:", error);
@@ -206,7 +212,7 @@ export default function ReporteComisiones() {
                Volver a Citas
             </button>
           </Link>
-          <h2 style={{ margin: 0, fontSize: '20px' }}>Reporte & Pago de Comisiones Técnicas</h2>
+          <h2 style={{ margin: 0, fontSize: '20px' }}> Reporte & Pago de Comisiones Técnicos</h2>
         </div>
 
         <Link href="/admin/dashboard">
@@ -237,15 +243,15 @@ export default function ReporteComisiones() {
           style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFB800', border: '1px solid #FFB800', outline: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
           <option value="todos">Todos los Estados (Pendientes y Pagados)</option>
-          <option value="pendiente">Solo Pendientes de Pago</option>
-          <option value="pagado">Solo Pagados</option>
+          <option value="pendiente"> Solo Pendientes de Pago</option>
+          <option value="pagado"> Solo Pagados</option>
         </select>
 
         <button 
           onClick={() => setModoRecibo(!modoRecibo)}
           style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          {modoRecibo ? 'Volver a Tabla General' : 'Ver Recibo de Pago'}
+          {modoRecibo ? ' Volver a Tabla General' : ' Ver Recibo de Pago'}
         </button>
 
         <button 
@@ -260,7 +266,6 @@ export default function ReporteComisiones() {
       {modoRecibo ? (
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
           
-          {/* Encabezado Comprobante */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }} className="texto-impresion">GR AUTO ADORNOS</h1>
@@ -272,7 +277,6 @@ export default function ReporteComisiones() {
             </div>
           </div>
 
-          {/* Información del Técnico */}
           <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333' }} className="resumen-box">
             <p style={{ margin: 0, fontSize: '14px' }} className="texto-impresion">
               Técnico / Instalador: <strong>{tecSeleccionadoNombre}</strong>
@@ -283,7 +287,6 @@ export default function ReporteComisiones() {
             Detalle de instalaciones y servicios <strong>PAGADOS Y LIQUIDADOS</strong>:
           </p>
 
-          {/* Tabla Desglose de Pago */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '25px' }}>
             <thead>
               <tr style={{ backgroundColor: '#222', color: '#FFF', textAlign: 'left' }}>
@@ -316,13 +319,11 @@ export default function ReporteComisiones() {
             </tbody>
           </table>
 
-          {/* Total Liquidado */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }} className="resumen-box">
             <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO / LIQUIDADO:</span>
             <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisionesPagadas.toLocaleString()}</span>
           </div>
 
-          {/* Firmas de Conformidad */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '70px', padding: '0 30px' }}>
             <div style={{ width: '220px', borderTop: '1px solid #888', paddingTop: '8px', textAlign: 'center' }}>
               <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }} className="texto-impresion">Firma del Técnico</p>
@@ -341,7 +342,7 @@ export default function ReporteComisiones() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#1A1A1A', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Trabajos Registrados</p>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '13px' }}>Trabajos Completados</p>
               <h3 style={{ margin: '5px 0 0 0', color: '#FFF' }}>{citasFiltradas.length}</h3>
             </div>
 
@@ -387,7 +388,7 @@ export default function ReporteComisiones() {
                       </td>
                       <td style={{ padding: '10px' }} className="no-print">
                         <button
-                          onClick={() => cambiarEstadoPago(item.id, item.estadoPagoTecnico)}
+                          onClick={() => cambiarEstadoPago(item)}
                           style={{
                             backgroundColor: estaPagado ? '#1C3829' : '#381C1C',
                             color: estaPagado ? '#25D366' : '#FF4D4D',
@@ -408,7 +409,7 @@ export default function ReporteComisiones() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                      No hay registros para este filtro.
+                      No hay registros de citas completadas para este filtro.
                     </td>
                   </tr>
                 )}
