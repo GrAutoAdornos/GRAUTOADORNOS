@@ -326,12 +326,12 @@ const handleCrearPedidoManual = async (e) => {
         montoComisionVendedor: montoComision
       };
 
-      // ✅ TRANSACCIÓN CORREGIDA
+      // TRANSACCIÓN CORREGIDA (Lecturas primero, Escrituras al final)
       await runTransaction(db, async (transaction) => {
         const idsProductos = Object.keys(mapaStockADescontar);
         const lecturasProductos = [];
 
-        // PASO 1: EJECUTAR TODAS LAS LECTURAS (READS) PRIMERO
+        // PASO 1: LECTURAS (READS)
         for (const prodId of idsProductos) {
           const prodRef = doc(db, 'productos', prodId);
           const prodDoc = await transaction.get(prodRef);
@@ -353,13 +353,34 @@ const handleCrearPedidoManual = async (e) => {
           });
         }
 
-        // PASO 2: EJECUTAR TODAS LAS ESCRITURAS (WRITES) AL FINAL
+        // PASO 2: ESCRITURAS (WRITES)
+        // 2a. Descontar stock de productos
         for (const item of lecturasProductos) {
           transaction.update(item.ref, { stock: item.nuevoStock });
         }
 
+        // 2b. Crear documento en la colección 'pedidos'
         const nuevoPedidoRef = doc(collection(db, 'pedidos'));
         transaction.set(nuevoPedidoRef, datosPedido);
+
+        // 2c. Crear documentos en la colección 'citas' por cada ítem que requiere instalación
+        itemsConInstalacion.forEach((itemInstalacion, index) => {
+          const nuevaCitaRef = doc(collection(db, 'citas'));
+          transaction.set(nuevaCitaRef, {
+            orderId: orderId,
+            pedidoId: nuevoPedidoRef.id,
+            clienteNombre: nombreCliente,
+            clienteTelefono: telefonoCliente,
+            productoNombre: itemInstalacion.nombre,
+            costoInstalacion: Number(itemInstalacion.costoInstalacion || 0),
+            fechaCita: itemInstalacion.fechaCita,
+            horaCita: itemInstalacion.horaCita,
+            estado: 'Pendiente',
+            fechaCreacion: new Date(),
+            origen: 'Pedido Manual',
+            unidadNumero: index + 1
+          });
+        });
       });
 
       setMostrarModal(false);
