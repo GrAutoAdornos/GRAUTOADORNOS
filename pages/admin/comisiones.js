@@ -9,6 +9,7 @@ export default function ReporteComisionesTecnicos() {
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
   const [filtroPago, setFiltroPago] = useState('todos');
   const [filtroEstadoCita, setFiltroEstadoCita] = useState('todos');
+  const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
   const [modoRecibo, setModoRecibo] = useState(false);
 
@@ -40,7 +41,7 @@ export default function ReporteComisionesTecnicos() {
     snapPedidos.forEach((docSnap) => {
       const data = docSnap.data() || {};
 
-      // 1. FILTRO STRICTO: Ignorar si NO requiere instalación
+      // 1. FILTRO ESTRICTO: Ignorar si NO requiere instalación
       if (data.requiereInstalacion !== true) {
         return;
       }
@@ -114,7 +115,7 @@ export default function ReporteComisionesTecnicos() {
     }
   };
 
-  // Filtrado de la vista
+  // Filtrado de la vista general
   const citasFiltradas = citasList.filter((item) => {
     if (tecnicoFiltro !== 'todos' && item.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && item.estadoPagoTecnico !== 'pendiente') return false;
@@ -124,12 +125,27 @@ export default function ReporteComisionesTecnicos() {
     if (filtroEstadoCita === 'completada' && !esComp) return false;
     if (filtroEstadoCita === 'pendiente' && esComp) return false;
 
+    // Filtro por texto de búsqueda
+    if (busqueda.trim() !== '') {
+      const q = busqueda.toLowerCase().trim();
+      const matchCliente = item.clienteNombre.toLowerCase().includes(q);
+      const matchTecnico = item.tecnicoNombre.toLowerCase().includes(q);
+      const matchDetalle = item.vehiculoServicio.toLowerCase().includes(q);
+      if (!matchCliente && !matchTecnico && !matchDetalle) return false;
+    }
+
     return true;
   });
 
-  // Totales
+  // Filtro exclusivo para el RECIBO (Solo registros PAGADOS)
+  const citasRecibo = citasFiltradas.filter(item => item.estadoPagoTecnico === 'pagado');
+
+  // Totales generales
   const totalCostoInstalacion = citasFiltradas.reduce((acc, c) => acc + c.costoInstalacion, 0);
   const totalComisiones = citasFiltradas.reduce((acc, c) => acc + c.montoComision, 0);
+
+  // Total exclusivo para el Recibo
+  const totalComisionesRecibo = citasRecibo.reduce((acc, c) => acc + c.montoComision, 0);
 
   const tecObjSeleccionado = tecnicos.find(t => t.id === tecnicoFiltro);
   const nombreTecnicoActivo = tecObjSeleccionado ? tecObjSeleccionado.nombre : 'Todos los Técnicos';
@@ -176,8 +192,21 @@ export default function ReporteComisionesTecnicos() {
         </div>
       </header>
 
-      {/* FILTROS */}
+      {/* FILTROS Y BÚSQUEDA */}
       <div className="no-print" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '25px', backgroundColor: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
+        
+        {/* BUSCADOR */}
+        <div>
+          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Buscar:</label>
+          <input 
+            type="text"
+            placeholder="Cliente, técnico, vehículo..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', width: '210px' }}
+          />
+        </div>
+
         <div>
           <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Técnico:</label>
           <select 
@@ -235,15 +264,15 @@ export default function ReporteComisionesTecnicos() {
       </div>
 
       {modoRecibo ? (
-        /* VISTA DE RECIBO DE PAGO */
+        /* VISTA DE RECIBO DE PAGO (SOLO REGISTROS PAGADOS) */
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }} className="texto-impresion">GR AUTO ADORNOS</h1>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#AAA' }} className="texto-impresion">Comprobante de Pago a Técnicos</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#AAA' }} className="texto-impresion">Comprobante Oficial de Pago de Comisiones</p>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>RECIBO DE COMISIONES</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>RECIBO DE PAGO</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha: {new Date().toLocaleDateString()}</p>
             </div>
           </div>
@@ -261,11 +290,11 @@ export default function ReporteComisionesTecnicos() {
                 <th style={{ padding: '10px', fontSize: '12px' }}>Cliente / Trabajo</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>Subtotal Instalación</th>
                 <th style={{ padding: '10px', fontSize: '12px' }}>% Com.</th>
-                <th style={{ padding: '10px', fontSize: '12px' }}>Comisión a Pagar</th>
+                <th style={{ padding: '10px', fontSize: '12px' }}>Comisión Pagada</th>
               </tr>
             </thead>
             <tbody>
-              {citasFiltradas.map((item) => (
+              {citasRecibo.map((item) => (
                 <tr key={item.id} style={{ borderBottom: '1px solid #333', fontSize: '13px' }}>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.fecha}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculoServicio}</td>
@@ -276,12 +305,19 @@ export default function ReporteComisionesTecnicos() {
                   </td>
                 </tr>
               ))}
+              {citasRecibo.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ padding: '25px', textAlign: 'center', color: '#888' }} className="texto-impresion">
+                    No hay comisiones marcadas como <strong>PAGADAS</strong> para este filtro.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL A ENTREGAR:</span>
-            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisiones.toLocaleString()}</span>
+            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO:</span>
+            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisionesRecibo.toLocaleString()}</span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', padding: '0 30px' }}>
@@ -390,7 +426,7 @@ export default function ReporteComisionesTecnicos() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No se encontraron pedidos registrados con servicio de instalación.
+                      No se encontraron resultados para los filtros aplicados.
                     </td>
                   </tr>
                 )}
