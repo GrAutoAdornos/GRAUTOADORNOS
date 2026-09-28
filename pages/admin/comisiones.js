@@ -71,7 +71,7 @@ export default function ReporteComisionesTecnicos() {
 
       // Si aún así no encuentra el valor específico (como en el caso de Freddy), usar el valor base estándar del servicio
       if (costoInstalacion === 0) {
-        costoInstalacion = Number(data.montoTotal || data.precioTotal || 1100);
+        costoInstalacion = Number(data.montoTotal || data.precioTotal || 0);
       }
 
       // Buscar técnico asignado
@@ -86,7 +86,7 @@ export default function ReporteComisionesTecnicos() {
       // Obtener Porcentaje del Técnico
       let porcentaje = Number(data.porcentajeComision || data.porcentaje) || 0;
       if (porcentaje === 0 && tecObj) {
-        porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
+        porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 0);
       }
 
       // CALCULO DE COMISIÓN DIRECTO
