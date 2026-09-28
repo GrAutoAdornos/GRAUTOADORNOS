@@ -44,7 +44,6 @@ export default function HistorialPedidos() {
   const [requiereInstalacion, setRequiereInstalacion] = useState(false);
   const [fechaCita, setFechaCita] = useState('');
   const [horaCita, setHoraCita] = useState('');
-  const costoInstalacion = Number(data.subtotalInstalaciones) || 0;
 
   // Ítems seleccionados
   const [itemsSeleccionados, setItemsSeleccionados] = useState([]);
