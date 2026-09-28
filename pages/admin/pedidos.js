@@ -226,7 +226,7 @@ export default function HistorialPedidos() {
   const costoEnvioCalculado = hayInstalacion ? 0 : zonaSeleccionada.costo;
   const totalGeneral = subtotalProductos + totalInstalaciones + costoEnvioCalculado;
 
-const handleCrearPedidoManual = async (e) => {
+  const handleCrearPedidoManual = async (e) => {
     e.preventDefault();
     if (!nombreCliente || !telefonoCliente || itemsSeleccionados.length === 0) {
       alert("Por favor completa el nombre, teléfono y selecciona al menos un producto.");
@@ -264,7 +264,7 @@ const handleCrearPedidoManual = async (e) => {
                   totalExistentes += 1;
                 }
               });
-            } else if (p.requiereInstalacion && p.fechaCita === fecha) {
+            } else if (p.requiereInstalacion && (p.fechaCita === fecha || p.fecha === fecha)) {
               totalExistentes += 1;
             }
           });
@@ -297,11 +297,15 @@ const handleCrearPedidoManual = async (e) => {
         mapaStockADescontar[i.productoId] = (mapaStockADescontar[i.productoId] || 0) + 1;
       });
 
+      // Si hay instalación, tomamos la fecha y hora de la primera unidad para poblar la raíz
+      const primeraInstalacion = itemsConInstalacion[0] || {};
+
       const datosPedido = {
         orderId: orderId,
         clienteNombre: nombreCliente,
         cliente: nombreCliente,
         telefono: telefonoCliente,
+        clienteTelefono: telefonoCliente,
         correo: correoCliente || 'No especificado',
         direccion: direccionCliente || zonaSeleccionada.nombre,
         zonaEnvio: zonaSeleccionada.nombre,
@@ -314,7 +318,11 @@ const handleCrearPedidoManual = async (e) => {
         metodoPago: metodoPago,
         estado: 'Pendiente',
         fidelizacionContactado: false,
-        fecha: new Date(),
+        fechaCreacion: new Date(),
+        fecha: primeraInstalacion.fechaCita || new Date(),
+        fechaCita: primeraInstalacion.fechaCita || '',
+        horaCita: primeraInstalacion.horaCita || '',
+        hora: primeraInstalacion.horaCita || '',
         origen: 'Manual (WhatsApp/Llamada)',
         requiereInstalacion: hayInstalacion,
         
@@ -326,7 +334,7 @@ const handleCrearPedidoManual = async (e) => {
         montoComisionVendedor: montoComision
       };
 
-      // TRANSACCIÓN CORREGIDA (Lecturas primero, Escrituras al final)
+      // TRANSACCIÓN DE FIRESTORE (Lecturas primero, Escrituras al final)
       await runTransaction(db, async (transaction) => {
         const idsProductos = Object.keys(mapaStockADescontar);
         const lecturasProductos = [];
@@ -354,27 +362,32 @@ const handleCrearPedidoManual = async (e) => {
         }
 
         // PASO 2: ESCRITURAS (WRITES)
-        // 2a. Descontar stock de productos
+        // 2a. Descontar stock
         for (const item of lecturasProductos) {
           transaction.update(item.ref, { stock: item.nuevoStock });
         }
 
-        // 2b. Crear documento en la colección 'pedidos'
+        // 2b. Crear documento en 'pedidos'
         const nuevoPedidoRef = doc(collection(db, 'pedidos'));
         transaction.set(nuevoPedidoRef, datosPedido);
 
-        // 2c. Crear documentos en la colección 'citas' por cada ítem que requiere instalación
+        // 2c. Crear documentos en 'citas' por cada unidad con instalación
         itemsConInstalacion.forEach((itemInstalacion, index) => {
           const nuevaCitaRef = doc(collection(db, 'citas'));
           transaction.set(nuevaCitaRef, {
             orderId: orderId,
             pedidoId: nuevoPedidoRef.id,
             clienteNombre: nombreCliente,
+            cliente: nombreCliente,
+            telefono: telefonoCliente,
             clienteTelefono: telefonoCliente,
             productoNombre: itemInstalacion.nombre,
+            producto: itemInstalacion.nombre,
             costoInstalacion: Number(itemInstalacion.costoInstalacion || 0),
             fechaCita: itemInstalacion.fechaCita,
+            fecha: itemInstalacion.fechaCita,
             horaCita: itemInstalacion.horaCita,
+            hora: itemInstalacion.horaCita,
             estado: 'Pendiente',
             fechaCreacion: new Date(),
             origen: 'Pedido Manual',
@@ -398,6 +411,7 @@ const handleCrearPedidoManual = async (e) => {
       
       cargarPedidos();
       cargarInventario();
+      alert("Pedido registrado con éxito. Si contenía instalaciones, ya están reflejadas en la agenda de citas.");
     } catch (error) {
       console.error("Error al crear pedido:", error);
       alert("Error: " + error.message);
@@ -580,7 +594,7 @@ const handleCrearPedidoManual = async (e) => {
                 </div>
 
                 <div style={{ fontSize: '13px', color: '#DDD', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <p style={{ margin: 0 }}><strong>Cliente:</strong> {pedido.clienteNombre || pedido.cliente} ({pedido.telefono})</p>
+                  <p style={{ margin: 0 }}><strong>Cliente:</strong> {pedido.clienteNombre || pedido.cliente} ({pedido.telefono || pedido.clienteTelefono})</p>
                   <p style={{ margin: 0 }}><strong>Dirección / Zona:</strong> {pedido.direccion}</p>
                   <p style={{ margin: 0 }}><strong>Detalles:</strong> {pedido.detalles}</p>
                   <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {pedido.metodoPago || 'Pago Contra Entrega'}</p>
@@ -606,7 +620,7 @@ const handleCrearPedidoManual = async (e) => {
                                   `• Zelle USD: Landra2916@gmail.com\n` +
                                   `*Titular:* Landra Guzman, Freddy Rodriguez\n\n` +
                                   `¡Gracias por preferirnos!`;
-                      window.open(`https://wa.me/1${String(pedido.telefono || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                      window.open(`https://wa.me/1${String(pedido.telefono || pedido.clienteTelefono || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
                     }}
                     style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -989,7 +1003,7 @@ const handleCrearPedidoManual = async (e) => {
                 <div style={{ textAlign: 'right' }}>
                   <h2 style={{ margin: 0, fontSize: '18px', color: '#333' }}>FACTURA</h2>
                   <p style={{ margin: '4px 0 0 0', fontSize: '14px', fontWeight: 'bold', color: '#E50914' }}>Orden #{facturaParaImprimir.orderId}</p>
-                  <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#555' }}>Fecha: {new Date(facturaParaImprimir.fecha?.seconds ? facturaParaImprimir.fecha.seconds * 1000 : Date.now()).toLocaleDateString('es-DO')}</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#555' }}>Fecha: {new Date(facturaParaImprimir.fechaCreacion?.seconds ? facturaParaImprimir.fechaCreacion.seconds * 1000 : Date.now()).toLocaleDateString('es-DO')}</p>
                 </div>
               </div>
 
@@ -997,7 +1011,7 @@ const handleCrearPedidoManual = async (e) => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', backgroundColor: '#F9F9F9', padding: '12px', borderRadius: '6px', marginBottom: '20px', fontSize: '12px' }}>
                 <div>
                   <strong>CLIENTE:</strong> {facturaParaImprimir.clienteNombre || facturaParaImprimir.cliente}<br />
-                  <strong>TELÉFONO:</strong> {facturaParaImprimir.telefono}<br />
+                  <strong>TELÉFONO:</strong> {facturaParaImprimir.telefono || facturaParaImprimir.clienteTelefono}<br />
                   <strong>CORREO:</strong> {facturaParaImprimir.correo || 'N/A'}
                 </div>
                 <div>
