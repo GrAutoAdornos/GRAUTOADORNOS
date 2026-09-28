@@ -60,14 +60,27 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Determinar si la orden o producto realmente requiere instalación
-  const requiereInstalacion = (data) => {
+  // Función flexible para verificar si la cita corresponde a un servicio de instalación
+  const esTrabajoInstalacion = (data) => {
     if (data.requiereInstalacion === true || data.conInstalacion === true || data.tipoServicio === 'instalacion') {
       return true;
     }
-    if (Array.isArray(data.productos) && data.productos.length > 0) {
-      return data.productos.some((p) => p.conInstalacion === true || p.instalacion === true || Number(p.precioInstalacion || p.costoInstalacion) > 0);
+    
+    // Verificar si en la descripción o productos existe el texto "[Con Instalación]" o similar
+    const stringData = JSON.stringify(data).toLowerCase();
+    if (stringData.includes('instalación') || stringData.includes('instalacion')) {
+      return true;
     }
+
+    if (Array.isArray(data.productos) && data.productos.length > 0) {
+      return data.productos.some((p) => 
+        p.conInstalacion === true || 
+        p.instalacion === true || 
+        Number(p.precioInstalacion || p.costoInstalacion) > 0 ||
+        String(p.nombre || p.titulo || '').toLowerCase().includes('instalación')
+      );
+    }
+
     return false;
   };
 
@@ -80,9 +93,9 @@ export default function ReporteComisiones() {
     if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
         const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
-        if (montoInst > 0 && (p.conInstalacion || p.instalacion)) {
+        if (montoInst > 0) {
           tarifaInstalacion += montoInst;
-        } else if (p.conInstalacion || p.instalacion) {
+        } else {
           const nombre = String(p.nombre || p.titulo || '').toLowerCase().trim();
           if (mapaProductos[nombre]) {
             tarifaInstalacion += mapaProductos[nombre];
@@ -92,7 +105,8 @@ export default function ReporteComisiones() {
       if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    return 0;
+    // Valor base predeterminado para instalaciones de taller si no está especificado
+    return Number(data.total || data.monto || 1000);
   };
 
   const obtenerCitasCompletadas = async (mapaProductos, listaTecnicos) => {
@@ -103,62 +117,57 @@ export default function ReporteComisiones() {
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data() || {};
         
-        // 1. Verificar si la orden incluye servicio de instalación
-        const esInstalacion = requiereInstalacion(data);
-        
-        // 2. Estado de la cita estrictamente completado
+        // 1. Estado de cita completada (Flexible)
         const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
         const esCompletada = estadoCita === 'completada' || estadoCita === 'completado';
 
-        // Solo procesar si reúne AMBAS condiciones
-        if (esInstalacion && esCompletada) {
+        // 2. Verificar si es una cita/instalación
+        const esInstalacion = esTrabajoInstalacion(data);
+
+        if (esCompletada && esInstalacion) {
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
+          const clienteNombre = data.cliente || data.clienteNombre || data.nombre || 'Cliente General';
           
-          if (precioInstalacion > 0) {
-            const clienteNombre = data.cliente || data.clienteNombre || data.nombre || 'Cliente General';
-            
-            let tecEncontrado = listaTecnicos.find(t => t.id === data.tecnicoId);
-            if (!tecEncontrado && data.tecnicoNombre) {
-              tecEncontrado = listaTecnicos.find(t => 
-                String(t.nombre || '').toLowerCase().trim() === String(data.tecnicoNombre).toLowerCase().trim()
-              );
-            }
-
-            const tecnicoNombre = tecEncontrado ? tecEncontrado.nombre : (data.tecnicoNombre || 'Sin Asignar');
-            const tecnicoId = tecEncontrado ? tecEncontrado.id : (data.tecnicoId || '');
-
-            let porcentajeComision = Number(data.porcentajeComision || data.porcentaje || data.tecnicoPorcentaje) || 0;
-            if (porcentajeComision === 0 && tecEncontrado) {
-              porcentajeComision = Number(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 20);
-            }
-
-            let montoComision = Number(data.montoComision) || 0;
-            if (montoComision === 0) {
-              montoComision = (precioInstalacion * porcentajeComision) / 100;
-            }
-
-            let vehiculoTexto = data.detalles || data.vehiculo;
-            if (!vehiculoTexto && Array.isArray(data.productos)) {
-              vehiculoTexto = data.productos
-                .filter(p => p.conInstalacion || p.instalacion)
-                .map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`)
-                .join(', ');
-            }
-
-            lista.push({
-              id: docSnap.id,
-              clienteNombre: clienteNombre,
-              vehiculo: vehiculoTexto || 'Servicio de Instalación',
-              tecnicoId: tecnicoId,
-              tecnicoNombre: tecnicoNombre,
-              precioInstalacion: precioInstalacion,
-              porcentajeComision: porcentajeComision,
-              montoComision: montoComision,
-              estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
-              fecha: formatearFecha(data.fechaInstalacion || data.fechaCita || data.fecha),
-              ...data
-            });
+          let tecEncontrado = listaTecnicos.find(t => t.id === data.tecnicoId);
+          if (!tecEncontrado && data.tecnicoNombre) {
+            tecEncontrado = listaTecnicos.find(t => 
+              String(t.nombre || '').toLowerCase().trim() === String(data.tecnicoNombre).toLowerCase().trim()
+            );
           }
+
+          const tecnicoNombre = tecEncontrado ? tecEncontrado.nombre : (data.tecnicoNombre || 'Sin Asignar');
+          const tecnicoId = tecEncontrado ? tecEncontrado.id : (data.tecnicoId || '');
+
+          let porcentajeComision = Number(data.porcentajeComision || data.porcentaje || data.tecnicoPorcentaje) || 0;
+          if (porcentajeComision === 0 && tecEncontrado) {
+            porcentajeComision = Number(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 20);
+          }
+
+          let montoComision = Number(data.montoComision) || 0;
+          if (montoComision === 0) {
+            montoComision = (precioInstalacion * porcentajeComision) / 100;
+          }
+
+          let vehiculoTexto = data.detalles || data.vehiculo;
+          if (!vehiculoTexto && Array.isArray(data.productos)) {
+            vehiculoTexto = data.productos
+              .map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`)
+              .join(', ');
+          }
+
+          lista.push({
+            id: docSnap.id,
+            clienteNombre: clienteNombre,
+            vehiculo: vehiculoTexto || 'Servicio de Instalación',
+            tecnicoId: tecnicoId,
+            tecnicoNombre: tecnicoNombre,
+            precioInstalacion: precioInstalacion,
+            porcentajeComision: porcentajeComision,
+            montoComision: montoComision,
+            estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
+            fecha: formatearFecha(data.fechaInstalacion || data.fechaCita || data.fecha),
+            ...data
+          });
         }
       });
 
