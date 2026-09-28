@@ -87,9 +87,20 @@ export default function ReporteComisiones() {
 
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data();
-        const estado = data.estadoCita || data.estado;
+        
+        // 1. Validar el estado del trabajo/cita
+        const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
+        const citaFinalizada = ['completada', 'completado', 'entregado', 'finalizado'].includes(estadoCita);
 
-        if (estado === 'Completada' || estado === 'Completado') {
+        // 2. Validar el estado del pedido/pago del cliente
+        const estadoPedido = String(data.estadoPedido || data.estadoGeneral || data.status || '').toLowerCase().trim();
+        const estadoPagoCliente = String(data.estadoPago || data.pagoEstado || '').toLowerCase().trim();
+
+        const pedidoCompletado = ['completado', 'completada', 'entregado', 'finalizado'].includes(estadoPedido);
+        const pagoClienteConfirmado = ['pagado', 'pagada', 'completado', 'confirmado'].includes(estadoPagoCliente);
+
+        // SOLO SE MUESTRA SI LA CITA/TRABAJO ESTÁ LISTA Y EL PEDIDO/PAGO DEL CLIENTE ESTÁ COMPLETADO O PAGADO
+        if (citaFinalizada && (pedidoCompletado || pagoClienteConfirmado)) {
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const porcentajeComision = Number(data.porcentajeComision || data.porcentaje) || 0;
           let montoComision = Number(data.montoComision) || 0;
@@ -192,10 +203,10 @@ export default function ReporteComisiones() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Link href="/admin/citas">
             <button style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #444', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-              ← Volver a Citas
+               Volver a Citas
             </button>
           </Link>
-          <h2 style={{ margin: 0, fontSize: '20px' }}>👷‍♂️ Reporte & Pago de Comisiones</h2>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Reporte & Pago de Comisiones Técnicas</h2>
         </div>
 
         <Link href="/admin/dashboard">
@@ -226,22 +237,22 @@ export default function ReporteComisiones() {
           style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFB800', border: '1px solid #FFB800', outline: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
           <option value="todos">Todos los Estados (Pendientes y Pagados)</option>
-          <option value="pendiente">🔴 Solo Pendientes de Pago</option>
-          <option value="pagado">🟢 Solo Pagados</option>
+          <option value="pendiente">Solo Pendientes de Pago</option>
+          <option value="pagado">Solo Pagados</option>
         </select>
 
         <button 
           onClick={() => setModoRecibo(!modoRecibo)}
           style={{ backgroundColor: modoRecibo ? '#222' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          {modoRecibo ? '📋 Volver a Tabla General' : '🧾 Ver Recibo de Pago'}
+          {modoRecibo ? 'Volver a Tabla General' : 'Ver Recibo de Pago'}
         </button>
 
         <button 
           onClick={() => window.print()}
           style={{ backgroundColor: '#E50914', color: '#FFF', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          🖨️ Imprimir Recibo
+           Imprimir Recibo
         </button>
       </div>
 
@@ -388,7 +399,7 @@ export default function ReporteComisiones() {
                             cursor: 'pointer'
                           }}
                         >
-                          {estaPagado ? '✅ PAGADO' : '🔴 PENDIENTE'}
+                          {estaPagado ? ' PAGADO' : ' PENDIENTE'}
                         </button>
                       </td>
                     </tr>
