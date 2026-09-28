@@ -60,30 +60,6 @@ export default function ReporteComisiones() {
     }
   };
 
-  // Función flexible para verificar si la cita corresponde a un servicio de instalación
-  const esTrabajoInstalacion = (data) => {
-    if (data.requiereInstalacion === true || data.conInstalacion === true || data.tipoServicio === 'instalacion') {
-      return true;
-    }
-    
-    // Verificar si en la descripción o productos existe el texto "[Con Instalación]" o similar
-    const stringData = JSON.stringify(data).toLowerCase();
-    if (stringData.includes('instalación') || stringData.includes('instalacion')) {
-      return true;
-    }
-
-    if (Array.isArray(data.productos) && data.productos.length > 0) {
-      return data.productos.some((p) => 
-        p.conInstalacion === true || 
-        p.instalacion === true || 
-        Number(p.precioInstalacion || p.costoInstalacion) > 0 ||
-        String(p.nombre || p.titulo || '').toLowerCase().includes('instalación')
-      );
-    }
-
-    return false;
-  };
-
   const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
     if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
     if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
@@ -105,7 +81,6 @@ export default function ReporteComisiones() {
       if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    // Valor base predeterminado para instalaciones de taller si no está especificado
     return Number(data.total || data.monto || 1000);
   };
 
@@ -117,14 +92,18 @@ export default function ReporteComisiones() {
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data() || {};
         
-        // 1. Estado de cita completada (Flexible)
+        // Normalizar lectura de estado
         const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
+        
+        // EVALUACIÓN DE ESTADO:
+        // Solo ingresa si está COMPLETADA
         const esCompletada = estadoCita === 'completada' || estadoCita === 'completado';
+        
+        // Evitar que entren pedidos normales sin cita o asignación de taller
+        const tieneTecnico = Boolean(data.tecnicoId || data.tecnicoNombre);
+        const esCitaValida = Boolean(data.esCita || data.fechaCita || data.fechaInstalacion || tieneTecnico);
 
-        // 2. Verificar si es una cita/instalación
-        const esInstalacion = esTrabajoInstalacion(data);
-
-        if (esCompletada && esInstalacion) {
+        if (esCompletada && esCitaValida) {
           const precioInstalacion = obtenerCostoInstalacionPuro(data, mapaProductos);
           const clienteNombre = data.cliente || data.clienteNombre || data.nombre || 'Cliente General';
           
