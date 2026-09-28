@@ -28,50 +28,66 @@ export default function ComisionesVendedores() {
     }
   };
 
-  // Helper para obtener la base imponible de comisión (subtotal solo productos)
-  const obtenerSubtotalProductos = (orden) => {
-    if (orden.subtotalProductos !== undefined) return Number(orden.subtotalProductos);
+  // Helper para obtener el subtotal/monto del pedido
+  const obtenerMontoBase = (orden) => {
+    if (orden.subtotalProductos !== undefined && Number(orden.subtotalProductos) > 0) {
+      return Number(orden.subtotalProductos);
+    }
     if (Array.isArray(orden.items) && orden.items.length > 0) {
       return orden.items.reduce((sum, item) => sum + (Number(item.precio || item.price || 0) * (item.cantidad || item.quantity || 1)), 0);
     }
     return Number(orden.total) || 0;
   };
 
-  // Filtrar órdenes
-  const ordenesFiltradas = ordenes.filter(orden => {
-    // Solo considerar órdenes que tengan vendedor asignado
-    if (!orden.vendedorId) return false;
+  // Helper para parsear fechas de Firebase/Strings
+  const parsearFecha = (orden) => {
+    const f = orden.fecha || orden.createdAt || orden.fechaCreacion;
+    if (!f) return null;
+    if (f.seconds) return new Date(f.seconds * 1000); // Timestamp de Firestore
+    return new Date(f);
+  };
 
-    // Filtro por vendedor específico
-    if (vendedorSeleccionado !== 'todos' && orden.vendedorId !== vendedorSeleccionado) {
-      return false;
+  // Filtrar órdenes por vendedor
+  const ordenesFiltradas = ordenes.filter(orden => {
+    // Verificar si la orden tiene vendedor asignado (ID o Nombre)
+    const tieneVendedor = orden.vendedorId || orden.vendedor || orden.vendedorNombre;
+    if (!tieneVendedor) return false;
+
+    // Filtro selector vendedor
+    if (vendedorSeleccionado !== 'todos') {
+      const coincideId = orden.vendedorId === vendedorSeleccionado;
+      const coincideNombre = (orden.vendedor || orden.vendedorNombre) === vendedorSeleccionado;
+      if (!coincideId && !coincideNombre) return false;
     }
 
     // Filtro por fecha
-    if (fechaInicio) {
-      const fechaOrden = new Date(orden.fecha || orden.createdAt);
-      if (fechaOrden < new Date(fechaInicio)) return false;
-    }
-    if (fechaFin) {
-      const fechaOrden = new Date(orden.fecha || orden.createdAt);
-      const fin = new Date(fechaFin);
-      fin.setHours(23, 59, 59);
-      if (fechaOrden > fin) return false;
+    const fechaOrden = parsearFecha(orden);
+    if (fechaOrden) {
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        inicio.setHours(0, 0, 0, 0);
+        if (fechaOrden < inicio) return false;
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        if (fechaOrden > fin) return false;
+      }
     }
 
     return true;
   });
 
   // Calcular totales acumulados
-  const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerSubtotalProductos(o), 0);
+  const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerMontoBase(o), 0);
   
   const totalComisiones = ordenesFiltradas.reduce((sum, o) => {
-    if (o.montoComisionVendedor !== undefined) {
+    if (o.montoComisionVendedor !== undefined && Number(o.montoComisionVendedor) > 0) {
       return sum + Number(o.montoComisionVendedor);
     }
-    const subtotal = obtenerSubtotalProductos(o);
-    const porcentaje = Number(o.vendedorPorcentaje) || Number(o.porcentajeComisionVendedor) || 5;
-    return sum + (subtotal * (porcentaje / 100));
+    const base = obtenerMontoBase(o);
+    const porcentaje = Number(o.vendedorPorcentaje || o.porcentajeComisionVendedor || o.porcentajeComision || 5);
+    return sum + (base * (porcentaje / 100));
   }, 0);
 
   return (
@@ -158,18 +174,21 @@ export default function ComisionesVendedores() {
         </thead>
         <tbody>
           {ordenesFiltradas.map(orden => {
-            const subtotalProd = obtenerSubtotalProductos(orden);
-            const pct = Number(orden.vendedorPorcentaje) || Number(orden.porcentajeComisionVendedor) || 5;
-            const comision = orden.montoComisionVendedor !== undefined 
+            const baseMonto = obtenerMontoBase(orden);
+            const pct = Number(orden.vendedorPorcentaje || orden.porcentajeComisionVendedor || orden.porcentajeComision || 5);
+            const comision = (orden.montoComisionVendedor !== undefined && Number(orden.montoComisionVendedor) > 0)
               ? Number(orden.montoComisionVendedor) 
-              : (subtotalProd * (pct / 100));
+              : (baseMonto * (pct / 100));
+
+            const nombreVendedor = orden.vendedorNombre || orden.vendedor || 'N/A';
+            const nombreCliente = orden.clienteNombre || orden.nombreCliente || orden.cliente || 'Cliente General';
 
             return (
               <tr key={orden.id} style={{ borderBottom: '1px solid #333' }}>
                 <td style={{ padding: '10px' }}>#{orden.id.slice(-6)}</td>
-                <td style={{ padding: '10px', fontWeight: 'bold' }}>{orden.vendedorNombre || 'N/A'}</td>
-                <td style={{ padding: '10px', color: '#AAA' }}>{orden.clienteNombre || orden.nombreCliente || 'Cliente General'}</td>
-                <td style={{ padding: '10px' }}>RD$ {subtotalProd.toLocaleString()}</td>
+                <td style={{ padding: '10px', fontWeight: 'bold' }}>{nombreVendedor}</td>
+                <td style={{ padding: '10px', color: '#AAA' }}>{nombreCliente}</td>
+                <td style={{ padding: '10px' }}>RD$ {baseMonto.toLocaleString()}</td>
                 <td style={{ padding: '10px' }}>{pct}%</td>
                 <td style={{ padding: '10px', color: '#4caf50', fontWeight: 'bold' }}>RD$ {comision.toLocaleString()}</td>
               </tr>
