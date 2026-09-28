@@ -8,6 +8,7 @@ export default function ReporteComisionesTecnicos() {
   const [tecnicos, setTecnicos] = useState([]);
   const [tecnicoFiltro, setTecnicoFiltro] = useState('todos');
   const [filtroPago, setFiltroPago] = useState('todos');
+  const [filtroEstadoCita, setFiltroEstadoCita] = useState('todos');
   const [loading, setLoading] = useState(true);
   const [modoRecibo, setModoRecibo] = useState(false);
 
@@ -40,25 +41,38 @@ export default function ReporteComisionesTecnicos() {
       const data = docSnap.data() || {};
       
       // Estado normalizado de la cita
-      const estadoCita = String(data.estadoCita || data.estado || '').trim().toLowerCase();
+      const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
       
-      // EXCLUSIÓN: Descartar si el estado es explícitamente cancelado o rechazado
+      // EXCLUSIÓN: Descartar si está cancelado o rechazado
       if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
 
-      // CALCULO EXCLUSIVO DE MANO DE OBRA (Solo precio de instalación)
-      let manoObra = Number(data.precioInstalacion || data.costoInstalacion || data.montoInstalacion || data.precioManoObra || 0);
+      // CÁLCULO DE MANO DE OBRA POR ÍTEMS O DOCUMENTO
+      let manoObra = 0;
 
-      if (manoObra === 0 && Array.isArray(data.productos)) {
+      if (Array.isArray(data.productos) && data.productos.length > 0) {
         data.productos.forEach((p) => {
           const cant = Number(p.cantidad || 1);
-          const instProd = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || 0);
+          // Buscar costoInstalacion / precioInstalacion / instalacion en cada item del carrito
+          const instProd = Number(
+            p.costoInstalacion ?? 
+            p.precioInstalacion ?? 
+            p.instalacion ?? 
+            p.precioManoObra ?? 
+            0
+          );
           manoObra += instProd * cant;
         });
       }
 
-      // Si no encuentra monto en el desglose, asignamos el valor base enviado en citas
-      if (manoObra === 0 && (data.esCita || data.fechaCita)) {
-        manoObra = Number(data.montoTotal || 1100);
+      // Si no se encontró valor en el desglose de productos, buscar a nivel de pedido
+      if (manoObra === 0) {
+        manoObra = Number(
+          data.costoInstalacion ?? 
+          data.precioInstalacion ?? 
+          data.montoInstalacion ?? 
+          data.precioManoObra ?? 
+          0
+        );
       }
 
       // Buscar técnico asignado
@@ -76,7 +90,7 @@ export default function ReporteComisionesTecnicos() {
         porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
       }
 
-      // CALCULO DE COMISION DIRECTO (% sobre Mano de Obra)
+      // CALCULO DE COMISIÓN (% sobre Mano de Obra)
       const montoComision = (manoObra * porcentaje) / 100;
 
       // Resumen del Vehículo / Producto
@@ -101,7 +115,7 @@ export default function ReporteComisionesTecnicos() {
         manoObra: manoObra,
         porcentajeComision: porcentaje,
         montoComision: montoComision,
-        estadoCita: estadoCita || 'pendiente',
+        estadoCita: estadoCita,
         estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
         fecha: fechaTexto
       });
@@ -120,11 +134,17 @@ export default function ReporteComisionesTecnicos() {
     }
   };
 
-  // Filtrado
+  // Filtrado general
   const citasFiltradas = citasList.filter((item) => {
     if (tecnicoFiltro !== 'todos' && item.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && item.estadoPagoTecnico !== 'pendiente') return false;
     if (filtroPago === 'pagado' && item.estadoPagoTecnico !== 'pagado') return false;
+    
+    // Filtro de Estado de Cita
+    const esComp = item.estadoCita === 'completada' || item.estadoCita === 'completado';
+    if (filtroEstadoCita === 'completada' && !esComp) return false;
+    if (filtroEstadoCita === 'pendiente' && esComp) return false;
+
     return true;
   });
 
@@ -194,6 +214,19 @@ export default function ReporteComisionesTecnicos() {
         </div>
 
         <div>
+          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Cita:</label>
+          <select 
+            value={filtroEstadoCita} 
+            onChange={(e) => setFiltroEstadoCita(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
+          >
+            <option value="todos">Todas las Citas</option>
+            <option value="completada">Solo Completadas</option>
+            <option value="pendiente">Solo Pendientes</option>
+          </select>
+        </div>
+
+        <div>
           <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Pago:</label>
           <select 
             value={filtroPago} 
@@ -223,7 +256,7 @@ export default function ReporteComisionesTecnicos() {
       </div>
 
       {modoRecibo ? (
-        /* VISTA DE COMPROBANTE DE PAGO / RECIBO */
+        /* VISTA DE RECIBO DE PAGO */
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
@@ -284,7 +317,7 @@ export default function ReporteComisionesTecnicos() {
           </div>
         </div>
       ) : (
-        /* VISTA DE TABLA PRINCIPAL CON ROJO/VERDE INVERTIDO */
+        /* VISTA DE TABLA CON COLORES INVERTIDOS (VERDE COMPLETADA / ROJO PENDIENTE) */
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
@@ -334,12 +367,12 @@ export default function ReporteComisionesTecnicos() {
                       </td>
                       <td style={{ padding: '12px', fontSize: '13px' }}>{item.tecnicoNombre}</td>
                       
-                      {/* ESTADO CITA: ROJO PARA COMPLETADA, VERDE PARA PENDIENTE */}
+                      {/* ESTADO CITA: VERDE PARA COMPLETADA, ROJO PARA PENDIENTE */}
                       <td style={{ padding: '12px', fontSize: '12px', fontWeight: 'bold' }}>
                         <span style={{
-                          backgroundColor: esCompletada ? '#381C1C' : '#1C3829',
-                          color: esCompletada ? '#FF4D4D' : '#25D366',
-                          border: esCompletada ? '1px solid #FF4D4D' : '1px solid #25D366',
+                          backgroundColor: esCompletada ? '#1C3829' : '#381C1C',
+                          color: esCompletada ? '#25D366' : '#FF4D4D',
+                          border: esCompletada ? '1px solid #25D366' : '1px solid #FF4D4D',
                           padding: '4px 8px',
                           borderRadius: '12px',
                           fontSize: '10px',
