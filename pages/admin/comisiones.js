@@ -10,6 +10,11 @@ export default function ReporteComisionesTecnicos() {
   const [filtroPago, setFiltroPago] = useState('todos');
   const [filtroEstadoCita, setFiltroEstadoCita] = useState('todos');
   const [busqueda, setBusqueda] = useState('');
+  
+  // Filtros de Fechas
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [modoRecibo, setModoRecibo] = useState(false);
 
@@ -80,11 +85,22 @@ export default function ReporteComisionesTecnicos() {
         detalleTrabajo = data.productos.map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`).join(', ');
       }
 
-      // Formato de Fecha
+      // Manejo y Normalización de Objeto Fecha
+      let fechaObjeto = null;
       let fechaTexto = 'Sin fecha';
       const fechaCampo = data.fechaCita || data.fechaInstalacion || data.fecha;
+
       if (fechaCampo) {
-        fechaTexto = fechaCampo?.toDate ? fechaCampo.toDate().toLocaleDateString() : String(fechaCampo);
+        if (fechaCampo.toDate) {
+          fechaObjeto = fechaCampo.toDate();
+        } else if (typeof fechaCampo === 'string') {
+          fechaObjeto = new Date(fechaCampo);
+        } else if (fechaCampo instanceof Date) {
+          fechaObjeto = fechaCampo;
+        }
+        if (fechaObjeto && !isNaN(fechaObjeto.getTime())) {
+          fechaTexto = fechaObjeto.toLocaleDateString();
+        }
       }
 
       listaFinal.push({
@@ -98,7 +114,8 @@ export default function ReporteComisionesTecnicos() {
         montoComision: montoComision,
         estadoCita: estadoCita,
         estadoPagoTecnico: String(data.estadoPagoTecnico || 'pendiente').toLowerCase(),
-        fecha: fechaTexto
+        fechaTexto: fechaTexto,
+        fechaObjeto: fechaObjeto
       });
     });
 
@@ -115,7 +132,41 @@ export default function ReporteComisionesTecnicos() {
     }
   };
 
-  // Filtrado de la vista general
+  // Funciones de Atajos de Fechas
+  const establecerQuincenaActual = () => {
+    const hoy = new Date();
+    const ano = hoy.getFullYear();
+    const mes = hoy.getMonth();
+    const dia = hoy.getDate();
+
+    let inicio, fin;
+    if (dia <= 15) {
+      inicio = new Date(ano, mes, 1);
+      fin = new Date(ano, mes, 15);
+    } else {
+      inicio = new Date(ano, mes, 16);
+      fin = new Date(ano, mes + 1, 0); // Último día del mes
+    }
+
+    setFechaDesde(inicio.toISOString().split('T')[0]);
+    setFechaHasta(fin.toISOString().split('T')[0]);
+  };
+
+  const establecerSemanaActual = () => {
+    const hoy = new Date();
+    const haceSieteDias = new Date();
+    haceSieteDias.setDate(hoy.getDate() - 6);
+
+    setFechaDesde(haceSieteDias.toISOString().split('T')[0]);
+    setFechaHasta(hoy.toISOString().split('T')[0]);
+  };
+
+  const limpiarFechas = () => {
+    setFechaDesde('');
+    setFechaHasta('');
+  };
+
+  // Filtrado general
   const citasFiltradas = citasList.filter((item) => {
     if (tecnicoFiltro !== 'todos' && item.tecnicoId !== tecnicoFiltro) return false;
     if (filtroPago === 'pendiente' && item.estadoPagoTecnico !== 'pendiente') return false;
@@ -125,7 +176,7 @@ export default function ReporteComisionesTecnicos() {
     if (filtroEstadoCita === 'completada' && !esComp) return false;
     if (filtroEstadoCita === 'pendiente' && esComp) return false;
 
-    // Filtro por texto de búsqueda
+    // Filtro Búsqueda
     if (busqueda.trim() !== '') {
       const q = busqueda.toLowerCase().trim();
       const matchCliente = item.clienteNombre.toLowerCase().includes(q);
@@ -134,17 +185,32 @@ export default function ReporteComisionesTecnicos() {
       if (!matchCliente && !matchTecnico && !matchDetalle) return false;
     }
 
+    // Filtro por Fechas
+    if (item.fechaObjeto) {
+      const fechaItem = new Date(item.fechaObjeto.getFullYear(), item.fechaObjeto.getMonth(), item.fechaObjeto.getDate());
+
+      if (fechaDesde) {
+        const [aD, mD, dD] = fechaDesde.split('-');
+        const desde = new Date(aD, mD - 1, dD);
+        if (fechaItem < desde) return false;
+      }
+
+      if (fechaHasta) {
+        const [aH, mH, dH] = fechaHasta.split('-');
+        const hasta = new Date(aH, mH - 1, dH);
+        if (fechaItem > hasta) return false;
+      }
+    }
+
     return true;
   });
 
   // Filtro exclusivo para el RECIBO (Solo registros PAGADOS)
   const citasRecibo = citasFiltradas.filter(item => item.estadoPagoTecnico === 'pagado');
 
-  // Totales generales
+  // Totales
   const totalCostoInstalacion = citasFiltradas.reduce((acc, c) => acc + c.costoInstalacion, 0);
   const totalComisiones = citasFiltradas.reduce((acc, c) => acc + c.montoComision, 0);
-
-  // Total exclusivo para el Recibo
   const totalComisionesRecibo = citasRecibo.reduce((acc, c) => acc + c.montoComision, 0);
 
   const tecObjSeleccionado = tecnicos.find(t => t.id === tecnicoFiltro);
@@ -192,79 +258,128 @@ export default function ReporteComisionesTecnicos() {
         </div>
       </header>
 
-      {/* FILTROS Y BÚSQUEDA */}
-      <div className="no-print" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '25px', backgroundColor: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
+      {/* FILTROS, BÚSQUEDA Y FECHAS */}
+      <div className="no-print" style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222', marginBottom: '25px' }}>
         
-        {/* BUSCADOR */}
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Buscar:</label>
-          <input 
-            type="text"
-            placeholder="Cliente, técnico, vehículo..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', width: '210px' }}
-          />
+        {/* FILA 1: FILTROS DE TEXTO Y SELECCIÓN */}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '15px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Buscar:</label>
+            <input 
+              type="text"
+              placeholder="Cliente, técnico, vehículo..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', width: '200px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Técnico:</label>
+            <select 
+              value={tecnicoFiltro} 
+              onChange={(e) => setTecnicoFiltro(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
+            >
+              <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
+              {tecnicos.map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado Cita:</label>
+            <select 
+              value={filtroEstadoCita} 
+              onChange={(e) => setFiltroEstadoCita(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
+            >
+              <option value="todos">Todas las Citas</option>
+              <option value="completada">Solo Completadas</option>
+              <option value="pendiente">Solo Pendientes</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Pago:</label>
+            <select 
+              value={filtroPago} 
+              onChange={(e) => setFiltroPago(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#25D366', border: '1px solid #25D366', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              <option value="todos">Todos los Estados de Pago</option>
+              <option value="pendiente">Solo Pendientes de Pago</option>
+              <option value="pagado">Solo Pagados</option>
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Técnico:</label>
-          <select 
-            value={tecnicoFiltro} 
-            onChange={(e) => setTecnicoFiltro(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
-          >
-            <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
-            {tecnicos.map((t) => (
-              <option key={t.id} value={t.id}>{t.nombre}</option>
-            ))}
-          </select>
+        {/* FILA 2: RANGO DE FECHAS Y ACCIONES */}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', borderTop: '1px solid #222', paddingTop: '15px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Desde:</label>
+            <input 
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Hasta:</label>
+            <input 
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              onClick={establecerQuincenaActual}
+              style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #555', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+            >
+              📅 Esta Quincena
+            </button>
+            <button 
+              onClick={establecerSemanaActual}
+              style={{ backgroundColor: '#222', color: '#FFF', border: '1px solid #555', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+            >
+              📆 Esta Semana
+            </button>
+            {(fechaDesde || fechaHasta) && (
+              <button 
+                onClick={limpiarFechas}
+                style={{ backgroundColor: '#381C1C', color: '#FF4D4D', border: '1px solid #FF4D4D', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+              >
+                ✖ Limpiar Fechas
+              </button>
+            )}
+          </div>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => setModoRecibo(!modoRecibo)}
+              style={{ backgroundColor: modoRecibo ? '#333' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              {modoRecibo ? ' Ver Tabla' : ' Ver Recibo de Pago'}
+            </button>
+            <button 
+              onClick={() => window.print()}
+              style={{ backgroundColor: '#E50914', color: '#FFF', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              Imprimir Comprobante
+            </button>
+          </div>
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Cita:</label>
-          <select 
-            value={filtroEstadoCita} 
-            onChange={(e) => setFiltroEstadoCita(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#FFF', border: '1px solid #444', cursor: 'pointer' }}
-          >
-            <option value="todos">Todas las Citas</option>
-            <option value="completada">Solo Completadas</option>
-            <option value="pendiente">Solo Pendientes</option>
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: '#AAA', marginBottom: '4px' }}>Estado de Pago:</label>
-          <select 
-            value={filtroPago} 
-            onChange={(e) => setFiltroPago(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#222', color: '#25D366', border: '1px solid #25D366', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            <option value="todos">Todos los Estados de Pago</option>
-            <option value="pendiente">Solo Pendientes de Pago</option>
-            <option value="pagado">Solo Pagados</option>
-          </select>
-        </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-          <button 
-            onClick={() => setModoRecibo(!modoRecibo)}
-            style={{ backgroundColor: modoRecibo ? '#333' : '#25D366', color: modoRecibo ? '#FFF' : '#000', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            {modoRecibo ? ' Ver Tabla' : ' Ver Recibo de Pago'}
-          </button>
-          <button 
-            onClick={() => window.print()}
-            style={{ backgroundColor: '#E50914', color: '#FFF', padding: '10px 18px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            Imprimir Comprobante
-          </button>
-        </div>
       </div>
 
       {modoRecibo ? (
-        /* VISTA DE RECIBO DE PAGO (SOLO REGISTROS PAGADOS) */
+        /* VISTA DE RECIBO DE PAGO (SOLO REGISTROS PAGADOS EN EL RANGO) */
         <div className="area-recibo" style={{ backgroundColor: '#141414', padding: '35px', borderRadius: '10px', border: '1px solid #333', maxWidth: '850px', margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E50914', paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
@@ -273,14 +388,19 @@ export default function ReporteComisionesTecnicos() {
             </div>
             <div style={{ textAlign: 'right' }}>
               <h3 style={{ margin: 0, fontSize: '16px', color: '#E50914' }}>RECIBO DE PAGO</h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha: {new Date().toLocaleDateString()}</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#CCC' }} className="texto-impresion">Fecha Emisión: {new Date().toLocaleDateString()}</p>
             </div>
           </div>
 
-          <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333' }}>
+          <div style={{ backgroundColor: '#1A1A1A', padding: '12px 18px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #333', display: 'flex', justifyContent: 'space-between' }}>
             <p style={{ margin: 0, fontSize: '14px' }} className="texto-impresion">
               Técnico / Instalador: <strong>{nombreTecnicoActivo}</strong>
             </p>
+            {(fechaDesde || fechaHasta) && (
+              <p style={{ margin: 0, fontSize: '13px', color: '#25D366' }} className="texto-impresion">
+                Período: {fechaDesde || 'Inicio'} al {fechaHasta || 'Hoy'}
+              </p>
+            )}
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '25px' }}>
@@ -296,7 +416,7 @@ export default function ReporteComisionesTecnicos() {
             <tbody>
               {citasRecibo.map((item) => (
                 <tr key={item.id} style={{ borderBottom: '1px solid #333', fontSize: '13px' }}>
-                  <td style={{ padding: '10px' }} className="texto-impresion">{item.fecha}</td>
+                  <td style={{ padding: '10px' }} className="texto-impresion">{item.fechaTexto}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.clienteNombre} - {item.vehiculoServicio}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">RD$ {item.costoInstalacion.toLocaleString()}</td>
                   <td style={{ padding: '10px' }} className="texto-impresion">{item.porcentajeComision}%</td>
@@ -308,7 +428,7 @@ export default function ReporteComisionesTecnicos() {
               {citasRecibo.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ padding: '25px', textAlign: 'center', color: '#888' }} className="texto-impresion">
-                    No hay comisiones marcadas como <strong>PAGADAS</strong> para este filtro.
+                    No hay comisiones marcadas como <strong>PAGADAS</strong> en el rango de fechas seleccionado.
                   </td>
                 </tr>
               )}
@@ -316,7 +436,7 @@ export default function ReporteComisionesTecnicos() {
           </table>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0D0D0D', padding: '15px 20px', borderRadius: '8px', border: '1px solid #333', marginBottom: '50px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO:</span>
+            <span style={{ fontSize: '15px', fontWeight: 'bold' }} className="texto-impresion">TOTAL ENTREGADO EN PERÍODO:</span>
             <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#25D366' }} className="texto-impresion">RD$ {totalComisionesRecibo.toLocaleString()}</span>
           </div>
 
@@ -336,7 +456,7 @@ export default function ReporteComisionesTecnicos() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas con Instalación</p>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas Filtradas</p>
               <h3 style={{ margin: '5px 0 0 0', color: '#FFF', fontSize: '22px' }}>{citasFiltradas.length}</h3>
             </div>
 
@@ -374,7 +494,7 @@ export default function ReporteComisionesTecnicos() {
 
                   return (
                     <tr key={item.id} style={{ borderBottom: '1px solid #222' }}>
-                      <td style={{ padding: '12px', fontSize: '13px', color: '#AAA' }}>{item.fecha}</td>
+                      <td style={{ padding: '12px', fontSize: '13px', color: '#AAA' }}>{item.fechaTexto}</td>
                       <td style={{ padding: '12px', fontSize: '13px' }}>
                         <strong>{item.clienteNombre}</strong>
                         <br />
@@ -426,7 +546,7 @@ export default function ReporteComisionesTecnicos() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No se encontraron resultados para los filtros aplicados.
+                      No se encontraron resultados para los filtros y/o fechas seleccionadas.
                     </td>
                   </tr>
                 )}
