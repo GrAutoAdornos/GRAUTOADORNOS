@@ -41,8 +41,7 @@ export default function ReporteComisionesTecnicos() {
       const data = docSnap.data() || {};
       const clienteNombre = String(data.cliente || data.clienteNombre || data.nombre || '').trim();
 
-      // BLOQUEO EXPLÍCITO DE OWEN Y CANCELADAS
-      if (clienteNombre.toLowerCase() === 'owen') return;
+      // BLOQUEO EXPLÍCITO CANCELADAS
       
       const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
       if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
