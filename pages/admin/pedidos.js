@@ -409,6 +409,33 @@ export default function HistorialPedidos() {
           GR Pedidos & Facturas
         </h1>
         <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+  onClick={() => window.location.href = '/admin/comisiones-vendedores.js'}
+  style={{
+    backgroundColor: '#000000',
+    color: '#FFF',
+    border: '2px solid #E50914',
+    padding: '8px 14px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.2s ease-in-out'
+  }}
+  onMouseOver={(e) => {
+    e.currentTarget.style.backgroundColor = '#E50914';
+    e.currentTarget.style.color = '#FFF';
+  }}
+  onMouseOut={(e) => {
+    e.currentTarget.style.backgroundColor = '#000000';
+    e.currentTarget.style.color = '#FFF';
+  }}
+>
+  💸 Comisiones Vendedores
+</button>
           <button
             onClick={() => setMostrarModal(true)}
             style={{ backgroundColor: '#25D366', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
