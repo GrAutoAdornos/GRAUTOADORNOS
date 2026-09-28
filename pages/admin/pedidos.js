@@ -410,7 +410,7 @@ export default function HistorialPedidos() {
         </h1>
         <div style={{ display: 'flex', gap: '10px' }}>
             <button
-  onClick={() => window.location.href = '/admin/comisiones-vendedores.js'}
+  onClick={() => window.location.href = '/admin/comisiones-vendedores'}
   style={{
     backgroundColor: '#000000',
     color: '#FFF',
