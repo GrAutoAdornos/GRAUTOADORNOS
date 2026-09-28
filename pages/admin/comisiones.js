@@ -60,15 +60,24 @@ export default function ReporteComisiones() {
     }
   };
 
-  const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
-    if (data.precioManoObra && Number(data.precioManoObra) > 0) return Number(data.precioManoObra);
-    if (data.precioInstalacion && Number(data.precioInstalacion) > 0) return Number(data.precioInstalacion);
-    if (data.costoInstalacion && Number(data.costoInstalacion) > 0) return Number(data.costoInstalacion);
+  // Extraer un valor numérico seguro desde cualquier variable
+  const limpiarNumero = (val) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+    return isNaN(num) ? 0 : num;
+  };
 
+  const obtenerCostoInstalacionPuro = (data, mapaProductos) => {
+    // 1. Verificar si la cita tiene mano de obra o precio de instalación explícito
+    const manoObra = limpiarNumero(data.precioManoObra || data.precioInstalacion || data.costoInstalacion || data.montoInstalacion);
+    if (manoObra > 0) return manoObra;
+
+    // 2. Verificar en el desglose de productos
     let tarifaInstalacion = 0;
     if (Array.isArray(data.productos) && data.productos.length > 0) {
       data.productos.forEach((p) => {
-        const montoInst = Number(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra || 0);
+        const montoInst = limpiarNumero(p.precioInstalacion || p.instalacion || p.costoInstalacion || p.instalacionExtra);
         if (montoInst > 0) {
           tarifaInstalacion += montoInst;
         } else {
@@ -81,7 +90,8 @@ export default function ReporteComisiones() {
       if (tarifaInstalacion > 0) return tarifaInstalacion;
     }
 
-    return Number(data.total || data.monto || 1000);
+    // 3. Si no hay tarifa separada de instalación, se toma el total del servicio/pedido
+    return limpiarNumero(data.total || data.monto || data.precioTotal || 1600);
   };
 
   const obtenerCitasCompletadas = async (mapaProductos, listaTecnicos) => {
@@ -92,14 +102,10 @@ export default function ReporteComisiones() {
       snapPedidos.forEach((docSnap) => {
         const data = docSnap.data() || {};
         
-        // Normalizar lectura de estado
+        // Estado de cita en minúsculas
         const estadoCita = String(data.estadoCita || data.estado || '').toLowerCase().trim();
-        
-        // EVALUACIÓN DE ESTADO:
-        // Solo ingresa si está COMPLETADA
         const esCompletada = estadoCita === 'completada' || estadoCita === 'completado';
         
-        // Evitar que entren pedidos normales sin cita o asignación de taller
         const tieneTecnico = Boolean(data.tecnicoId || data.tecnicoNombre);
         const esCitaValida = Boolean(data.esCita || data.fechaCita || data.fechaInstalacion || tieneTecnico);
 
@@ -117,12 +123,17 @@ export default function ReporteComisiones() {
           const tecnicoNombre = tecEncontrado ? tecEncontrado.nombre : (data.tecnicoNombre || 'Sin Asignar');
           const tecnicoId = tecEncontrado ? tecEncontrado.id : (data.tecnicoId || '');
 
-          let porcentajeComision = Number(data.porcentajeComision || data.porcentaje || data.tecnicoPorcentaje) || 0;
+          // Extraer Porcentaje
+          let porcentajeComision = limpiarNumero(data.porcentajeComision || data.porcentaje || data.tecnicoPorcentaje);
           if (porcentajeComision === 0 && tecEncontrado) {
-            porcentajeComision = Number(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 20);
+            porcentajeComision = limpiarNumero(tecEncontrado.porcentajeDefecto || tecEncontrado.porcentaje || 50);
+          }
+          if (porcentajeComision === 0) {
+            porcentajeComision = 50; // Porcentaje base si no está definido
           }
 
-          let montoComision = Number(data.montoComision) || 0;
+          // CALCULAR COMISIÓN DE FORMA DIRECTA Y LIMPIA
+          let montoComision = limpiarNumero(data.montoComision);
           if (montoComision === 0) {
             montoComision = (precioInstalacion * porcentajeComision) / 100;
           }
@@ -238,7 +249,7 @@ export default function ReporteComisiones() {
           <option value="todos">Todos los Técnicos ({tecnicos.length})</option>
           {tecnicos.map((tec) => (
             <option key={tec.id} value={tec.id}>
-              {tec.nombre} ({tec.porcentajeDefecto || tec.porcentaje || 20}%)
+              {tec.nombre} ({tec.porcentajeDefecto || tec.porcentaje || 50}%)
             </option>
           ))}
         </select>
