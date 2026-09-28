@@ -16,81 +16,81 @@ export default function ComisionesVendedores() {
 
   const cargarDatos = async () => {
     try {
-      // Cargar Vendedores
+      // 1. Cargar Vendedores
       const snapVendedores = await getDocs(collection(db, 'vendedores'));
       const listaVendedores = snapVendedores.docs.map(d => ({ id: d.id, ...d.data() }));
       setVendedores(listaVendedores);
 
-      // Cargar Órdenes
+      // 2. Cargar Órdenes
       const snapOrdenes = await getDocs(collection(db, 'ordenes'));
       const listaOrdenes = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
       setOrdenes(listaOrdenes);
     } catch (error) {
-      console.error("Error al cargar información:", error);
+      console.error("Error al cargar datos:", error);
     }
   };
 
-  // Helper para obtener el nombre del vendedor de una orden
+  // Extrae el nombre del vendedor de cualquier estructura posible de orden
   const obtenerNombreVendedor = (orden) => {
     if (orden.vendedorNombre) return orden.vendedorNombre;
     if (typeof orden.vendedor === 'string') return orden.vendedor;
     if (typeof orden.vendedor === 'object' && orden.vendedor?.nombre) return orden.vendedor.nombre;
-    // Si solo hay ID, buscarlo en la lista de vendedores
     if (orden.vendedorId) {
-      const vEncontrado = vendedores.find(v => v.id === orden.vendedorId);
-      if (vEncontrado) return vEncontrado.nombre;
+      const v = vendedores.find(vDoc => vDoc.id === orden.vendedorId);
+      if (v) return v.nombre;
     }
     return null;
   };
 
-  // Helper para obtener la base de la comisión (productos)
+  // Mapea la base imponible del pedido (solo productos)
   const obtenerMontoBase = (orden) => {
     if (orden.subtotalProductos !== undefined && Number(orden.subtotalProductos) > 0) {
       return Number(orden.subtotalProductos);
     }
     if (Array.isArray(orden.items) && orden.items.length > 0) {
       return orden.items.reduce((sum, item) => {
-        const precio = Number(item.precio || item.price || 0);
-        const cant = Number(item.cantidad || item.quantity || 1);
-        return sum + (precio * cant);
+        const p = Number(item.precio || item.price || 0);
+        const q = Number(item.cantidad || item.quantity || 1);
+        return sum + (p * q);
       }, 0);
     }
     return Number(orden.total) || 0;
   };
 
-  // Filtrado de órdenes
+  // Filtrado flexible
   const ordenesFiltradas = ordenes.filter(orden => {
     const nombreVendedor = obtenerNombreVendedor(orden);
-    
-    // Si la orden no tiene ningún dato de vendedor, la ignoramos
-    if (!nombreVendedor && !orden.vendedorId) return false;
 
-    // Filtro selector
+    // Si la orden no tiene ninguna referencia a vendedor, omitir
+    if (!nombreVendedor && !orden.vendedorId && !orden.vendedor) return false;
+
+    // Filtro por Vendedor seleccionado
     if (vendedorSeleccionado !== 'todos') {
       const vObj = vendedores.find(v => v.id === vendedorSeleccionado);
-      const nombreSeleccionado = vObj ? vObj.nombre : '';
+      const nombreTarget = vObj ? vObj.nombre : '';
 
       const coincideId = orden.vendedorId === vendedorSeleccionado;
-      const coincideNombre = nombreVendedor && nombreSeleccionado && 
-        nombreVendedor.trim().toLowerCase() === nombreSeleccionado.trim().toLowerCase();
+      const coincideNombre = nombreVendedor && nombreTarget && 
+        nombreVendedor.trim().toLowerCase() === nombreTarget.trim().toLowerCase();
 
       if (!coincideId && !coincideNombre) return false;
     }
 
-    // Filtro por Fecha
-    const fechaRaw = orden.fecha || orden.createdAt || orden.fechaCreacion;
-    if (fechaRaw) {
-      const fechaOrden = fechaRaw.seconds ? new Date(fechaRaw.seconds * 1000) : new Date(fechaRaw);
-      
-      if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setHours(0, 0, 0, 0);
-        if (fechaOrden < inicio) return false;
-      }
-      if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setHours(23, 59, 59, 999);
-        if (fechaOrden > fin) return false;
+    // Filtro opcional por Fecha
+    const fRaw = orden.fecha || orden.createdAt || orden.fechaCreacion;
+    if (fRaw) {
+      const fechaOrden = fRaw.seconds ? new Date(fRaw.seconds * 1000) : new Date(fRaw);
+      if (!isNaN(fechaOrden.getTime())) {
+        if (fechaInicio) {
+          const inicio = new Date(fechaInicio);
+          inicio.setHours(0, 0, 0, 0);
+          if (fechaOrden < inicio) return false;
+        }
+        if (fechaFin) {
+          const fin = new Date(fechaFin);
+          fin.setHours(23, 59, 59, 999);
+          if (fechaOrden > fin) return false;
+        }
       }
     }
 
@@ -99,14 +99,18 @@ export default function ComisionesVendedores() {
 
   // Totales
   const totalVendido = ordenesFiltradas.reduce((sum, o) => sum + obtenerMontoBase(o), 0);
-  
+
   const totalComisiones = ordenesFiltradas.reduce((sum, o) => {
     if (o.montoComisionVendedor !== undefined && Number(o.montoComisionVendedor) > 0) {
       return sum + Number(o.montoComisionVendedor);
     }
     const base = obtenerMontoBase(o);
-    const porcentaje = Number(o.vendedorPorcentaje || o.porcentajeComisionVendedor || o.porcentajeComision || 5);
-    return sum + (base * (porcentaje / 100));
+    // Buscar si hay un vendedor asociado para saber su % por defecto
+    const nombreV = obtenerNombreVendedor(o);
+    const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
+    const pct = Number(o.vendedorPorcentaje || o.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
+    
+    return sum + (base * (pct / 100));
   }, 0);
 
   return (
@@ -194,12 +198,14 @@ export default function ComisionesVendedores() {
         <tbody>
           {ordenesFiltradas.map(orden => {
             const baseMonto = obtenerMontoBase(orden);
-            const pct = Number(orden.vendedorPorcentaje || orden.porcentajeComisionVendedor || orden.porcentajeComision || 5);
+            const nombreV = obtenerNombreVendedor(orden) || 'N/A';
+            const vObj = vendedores.find(v => v.nombre?.trim().toLowerCase() === nombreV?.trim().toLowerCase());
+            const pct = Number(orden.vendedorPorcentaje || orden.porcentajeComisionVendedor || vObj?.porcentajeDefecto || 5);
+            
             const comision = (orden.montoComisionVendedor !== undefined && Number(orden.montoComisionVendedor) > 0)
               ? Number(orden.montoComisionVendedor) 
               : (baseMonto * (pct / 100));
 
-            const nombreV = obtenerNombreVendedor(orden) || 'N/A';
             const nombreC = orden.clienteNombre || orden.nombreCliente || orden.cliente || 'Cliente General';
 
             return (
