@@ -40,14 +40,14 @@ export default function ReporteComisionesTecnicos() {
     snapPedidos.forEach((docSnap) => {
       const data = docSnap.data() || {};
 
-      // 1. Descartar pedidos en estado cancelado o rechazado
+      // 1. Descartar pedidos cancelados / rechazados
       const estadoCita = String(data.estadoCita || data.estado || 'pendiente').trim().toLowerCase();
       if (estadoCita === 'cancelada' || estadoCita === 'cancelado' || estadoCita === 'rechazada') return;
 
-      // 2. CÁLCULO DEL COSTO DE INSTALACIÓN REAL
+      // 2. EXTRAER COSTO BASE DE INSTALACIÓN / SERVICIO
       let costoInstalacion = 0;
 
-      // Evaluar la lista de productos dentro del pedido
+      // Buscar en lista de productos si existe
       if (Array.isArray(data.productos) && data.productos.length > 0) {
         data.productos.forEach((p) => {
           const cant = Number(p.cantidad || 1);
@@ -62,7 +62,7 @@ export default function ReporteComisionesTecnicos() {
         });
       }
 
-      // Si los productos no traen costo individual, evaluar la raíz del documento
+      // Buscar en campos específicos de raíz
       if (costoInstalacion === 0) {
         costoInstalacion = Number(
           data.costoInstalacion ?? 
@@ -73,15 +73,15 @@ export default function ReporteComisionesTecnicos() {
         );
       }
 
-      // REGULARIZACIÓN AUTOMÁTICA: Si el pedido no especifica un costo de instalación explicito pero sí tiene un monto de instalacion registrado en el tipo de servicio
-      if (costoInstalacion === 0 && (data.tipoServicio === 'instalacion' || data.requiereInstalacion === true)) {
-        costoInstalacion = Number(data.montoInstalacion || data.costoManoObra || 0);
+      // FALLBACK AUTOMÁTICO: Si no hay un desglose explícito de mano de obra, usa el total del servicio/pedido
+      if (costoInstalacion === 0) {
+        costoInstalacion = Number(data.montoTotal ?? data.total ?? data.precio ?? data.monto ?? 0);
       }
 
-      // FILTRO AUTOMÁTICO GENERAL: Si NO tiene costo de instalación (<= 0), no califica para comisión y se ignora por completo
+      // Ignorar si realmente no hay monto alguno asignado (registros vacíos)
       if (costoInstalacion <= 0) return;
 
-      // 3. IDENTIFICACIÓN DE TÉCNICO Y PORCENTAJE
+      // 3. IDENTIFICAR TÉCNICO
       let tecObj = listaTec.find(t => t.id === data.tecnicoId);
       if (!tecObj && data.tecnicoNombre) {
         tecObj = listaTec.find(t => String(t.nombre || '').toLowerCase().trim() === String(data.tecnicoNombre).toLowerCase().trim());
@@ -90,7 +90,7 @@ export default function ReporteComisionesTecnicos() {
       const tecnicoNombre = tecObj ? tecObj.nombre : (data.tecnicoNombre || 'Sin Asignar');
       const tecnicoId = tecObj ? tecObj.id : (data.tecnicoId || '');
 
-      // Obtener Porcentaje asignado (del pedido o del perfil del técnico)
+      // Obtener Porcentaje del Técnico
       let porcentaje = Number(data.porcentajeComision || data.porcentaje) || 0;
       if (porcentaje === 0 && tecObj) {
         porcentaje = Number(tecObj.porcentajeDefecto || tecObj.porcentaje || 50);
@@ -99,7 +99,7 @@ export default function ReporteComisionesTecnicos() {
       // 4. CÁLCULO DE COMISIÓN
       const montoComision = (costoInstalacion * porcentaje) / 100;
 
-      // Resumen del trabajo
+      // Resumen del Vehículo o Producto
       let detalleTrabajo = data.detalles || data.vehiculo;
       if (!detalleTrabajo && Array.isArray(data.productos)) {
         detalleTrabajo = data.productos.map(p => `${p.nombre || p.titulo || 'Producto'} (x${p.cantidad || 1})`).join(', ');
@@ -186,7 +186,7 @@ export default function ReporteComisionesTecnicos() {
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Control de Comisiones de Técnicos</h1>
-          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Filtro automático: solo se procesan pedidos con costo de instalación</p>
+          <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: '13px' }}>Cálculo automático sobre el valor del servicio</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link href="/admin/citas">
@@ -326,7 +326,7 @@ export default function ReporteComisionesTecnicos() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ backgroundColor: '#141414', padding: '18px', borderRadius: '8px', border: '1px solid #222' }}>
-              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas con Instalación</p>
+              <p style={{ color: '#AAA', margin: 0, fontSize: '12px' }}>Total Citas Evaluadas</p>
               <h3 style={{ margin: '5px 0 0 0', color: '#FFF', fontSize: '22px' }}>{citasFiltradas.length}</h3>
             </div>
 
@@ -416,7 +416,7 @@ export default function ReporteComisionesTecnicos() {
                 {citasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                      No hay pedidos con servicio de instalación registrado.
+                      No se encontraron registros activos en la base de datos.
                     </td>
                   </tr>
                 )}
